@@ -30,7 +30,7 @@ func (r *Reader) Close() {
 // ReadPackets reads all packets from the pcap file and sends the parsed
 // PacketInfo to the provided channel. It closes the channel when done.
 func (r *Reader) ReadPackets(out chan<- *model.PacketInfo) {
-	defer close(out)
+	
 
 	packetSource := gopacket.NewPacketSource(r.handle, r.handle.LinkType())
 	for packet := range packetSource.Packets() {
