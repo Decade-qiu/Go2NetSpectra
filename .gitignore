@@ -19,3 +19,6 @@ vendor/
 
 # Large test data
 test/data/large_test.pcap
+
+# macOS specific
+.DS_Store
