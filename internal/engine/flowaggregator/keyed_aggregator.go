@@ -51,7 +51,6 @@ func (ka *KeyedAggregator) getShard(key string) *Shard {
 
 // generateKey creates a unique string key for a packet based on the aggregator's KeyFields.
 func (ka *KeyedAggregator) generateKey(ft model.FiveTuple) (string, error) {
-	// This function remains the same
 	var parts []string
 	for _, field := range ka.KeyFields {
 		switch field {
@@ -101,29 +100,24 @@ func (ka *KeyedAggregator) ProcessPacket(packetInfo *model.PacketInfo) {
 	}
 }
 
-// GetFlowCount returns the total number of active flows in the aggregator.
-// Note: This is for testing/metrics purposes.
-func (ka *KeyedAggregator) GetFlowCount() int {
-	count := 0
+// Snapshot atomically swaps the active flows map in each shard with a new empty map
+// and returns the old maps for processing.
+func (ka *KeyedAggregator) Snapshot() []*Shard {
+	oldShards := make([]*Shard, ka.shardCount)
+
 	for i := 0; i < int(ka.shardCount); i++ {
 		shard := ka.shards[i]
-		shard.mu.RLock()
-		count += len(shard.flows)
-		shard.mu.RUnlock()
-	}
-	return count
-}
+		shard.mu.Lock()
 
-// GetFlow returns a copy of a flow for a given key.
-// Note: This is for testing/metrics purposes.
-func (ka *KeyedAggregator) GetFlow(key string) (*model.Flow, bool) {
-    shard := ka.getShard(key)
-    shard.mu.RLock()
-    defer shard.mu.RUnlock()
-    if flow, ok := shard.flows[key]; ok {
-        // Return a copy to avoid race conditions
-        flowCopy := *flow
-        return &flowCopy, true
-    }
-    return nil, false
+		oldFlows := shard.flows
+		shard.flows = make(map[string]*model.Flow) // Start using the new map
+
+		shard.mu.Unlock()
+
+		// The old data is now available without a lock for processing
+		oldShards[i] = &Shard{
+			flows: oldFlows,
+		}
+	}
+	return oldShards
 }

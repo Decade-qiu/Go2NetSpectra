@@ -1,4 +1,6 @@
 aggregator:
+  snapshot_interval: "30s"
+  storage_root_path: "/tmp/gons_snapshots"
   tasks:
     - name: "by_src_ip"
       key_fields: ["SrcIP"]

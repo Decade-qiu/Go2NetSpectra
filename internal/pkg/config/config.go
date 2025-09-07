@@ -15,7 +15,9 @@ type AggregationTaskDef struct {
 
 // AggregatorConfig holds the configuration for the flow aggregator.
 type AggregatorConfig struct {
-	Tasks []AggregationTaskDef `yaml:"tasks"`
+	Tasks            []AggregationTaskDef `yaml:"tasks"`
+	SnapshotInterval string               `yaml:"snapshot_interval"`
+	StorageRootPath  string               `yaml:"storage_root_path"`
 }
 
 // Config is the top-level configuration struct for the entire application.
