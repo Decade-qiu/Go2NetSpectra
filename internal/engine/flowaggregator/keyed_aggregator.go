@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const defaultShardCount = 256
@@ -126,4 +127,31 @@ func (ka *KeyedAggregator) GetFlow(key string) (*model.Flow, bool) {
         return &flowCopy, true
     }
     return nil, false
+}
+
+// FlushInactiveFlows checks for flows that have not seen a packet for the given
+// timeout duration, removes them from the active list, and returns them.
+func (ka *KeyedAggregator) FlushInactiveFlows(timeout time.Duration) []*model.Flow {
+	var flushedFlows []*model.Flow
+	now := time.Now()
+
+	for _, shard := range ka.shards {
+		shard.mu.Lock() // Use a full lock as we are modifying the map
+
+		var flowsToFlush []string
+		for key, flow := range shard.flows {
+			if now.Sub(flow.EndTime) > timeout {
+				flushedFlows = append(flushedFlows, flow)
+				flowsToFlush = append(flowsToFlush, key)
+			}
+		}
+
+		for _, key := range flowsToFlush {
+			delete(shard.flows, key)
+		}
+
+		shard.mu.Unlock()
+	}
+
+	return flushedFlows
 }

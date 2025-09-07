@@ -9,22 +9,20 @@ import (
 	"time"
 )
 
-func TestFlowAggregator_Concurrent(t *testing.T) {
+func TestFlowAggregator_Flush(t *testing.T) {
 	// 1. Load config
 	cfg, err := config.LoadConfig("../../../configs/config.yaml")
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// 2. Create aggregator with a number of workers equal to CPU cores
+	// 2. Create aggregator with short intervals for testing
 	numWorkers := runtime.NumCPU()
-	aggregator := NewFlowAggregator(cfg, numWorkers)
+	flushInterval := 50 * time.Millisecond
+	flowTimeout := 100 * time.Millisecond
+	aggregator := NewFlowAggregator(cfg, numWorkers, flushInterval, flowTimeout)
 
-	if len(aggregator.subAggregators) != 6 {
-		t.Fatalf("Expected 6 sub-aggregators based on config, but got %d", len(aggregator.subAggregators))
-	}
-
-	// 3. Start the aggregator's worker pool
+	// 3. Start the aggregator
 	aggregator.Start()
 
 	// 4. Create a sample packet and send it
@@ -39,29 +37,40 @@ func TestFlowAggregator_Concurrent(t *testing.T) {
 		},
 		Length: 100,
 	}
-
 	aggregator.InputChannel <- packet
 
-	// 5. Stop the aggregator, which waits for workers to finish processing
+	// 5. Wait for the flow to be flushed
+	var flushedFlows []FlushedFlows
+	timeoutChan := time.After(500 * time.Millisecond)
+	doneChan := make(chan bool)
+
+	go func() {
+		for f := range aggregator.OutputChannel {
+			flushedFlows = append(flushedFlows, f)
+			if len(flushedFlows) == 6 { // We expect 6 aggregators to flush one flow each
+				doneChan <- true
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-timeoutChan:
+		t.Fatalf("Test timed out waiting for flushed flows. Got %d of 6.", len(flushedFlows))
+	case <-doneChan:
+		// Continue
+	}
+
+	// 6. Stop the aggregator
 	aggregator.Stop()
 
-	// 6. Inspect the sub-aggregators to verify the packet was processed
-	for _, subAgg := range aggregator.subAggregators {
-		if subAgg.GetFlowCount() != 1 {
-			t.Errorf("Aggregator '%s' should have 1 active flow, but has %d", subAgg.Name, subAgg.GetFlowCount())
-		}
-
-		// Generate the expected key to verify the flow
-		expectedKey, _ := subAgg.generateKey(packet.FiveTuple)
-		if flow, ok := subAgg.GetFlow(expectedKey); ok {
-			if flow.PacketCount != 1 {
-				t.Errorf("Flow '%s' in aggregator '%s' should have PacketCount 1, got %d", expectedKey, subAgg.Name, flow.PacketCount)
-			}
-			if flow.ByteCount != 100 {
-				t.Errorf("Flow '%s' in aggregator '%s' should have ByteCount 100, got %d", expectedKey, subAgg.Name, flow.ByteCount)
-			}
-		} else {
-			t.Errorf("Aggregator '%s' did not contain expected flow with key '%s'", subAgg.Name, expectedKey)
+	// 7. Verify results
+	if len(flushedFlows) != 6 {
+		t.Errorf("Expected 6 sets of flushed flows, but got %d", len(flushedFlows))
+	}
+	for _, f := range flushedFlows {
+		if len(f.Flows) != 1 {
+			t.Errorf("Expected 1 flow to be flushed from aggregator '%s', but got %d", f.AggregatorName, len(f.Flows))
 		}
 	}
 }
