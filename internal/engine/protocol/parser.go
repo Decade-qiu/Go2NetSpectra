@@ -3,9 +3,10 @@ package protocol
 import (
 	"Go2NetSpectra/internal/core/model"
 	"fmt"
+	"time"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"time"
 )
 
 // ParsePacket uses gopacket to decode a raw packet and extract key information.
@@ -22,35 +23,33 @@ func ParsePacket(data []byte) (*model.PacketInfo, error) {
 	}
 
 	var fiveTuple model.FiveTuple
-	var ipLayer *layers.IPv4
-	var tcpLayer *layers.TCP
-	var udpLayer *layers.UDP
 
-	// Get IPv4 layer
-	if l := packet.Layer(layers.LayerTypeIPv4); l != nil {
-		ipLayer = l.(*layers.IPv4)
-		fiveTuple.SrcIP = ipLayer.SrcIP
-		fiveTuple.DstIP = ipLayer.DstIP
-		fiveTuple.Protocol = uint8(ipLayer.Protocol)
+	// Get IP layer
+	if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
+		ip, _ := ipLayer.(*layers.IPv4)
+		fiveTuple.SrcIP = ip.SrcIP
+		fiveTuple.DstIP = ip.DstIP
+		fiveTuple.Protocol = uint8(ip.Protocol)
+	} else if ipLayer := packet.Layer(layers.LayerTypeIPv6); ipLayer != nil {
+		ip, _ := ipLayer.(*layers.IPv6)
+		fiveTuple.SrcIP = ip.SrcIP
+		fiveTuple.DstIP = ip.DstIP
+		fiveTuple.Protocol = uint8(ip.NextHeader)
 	} else {
-		// Handle IPv6 if necessary, for now we skip non-IPv4
-		return nil, fmt.Errorf("not an IPv4 packet")
+		return nil, fmt.Errorf("not an IP packet")
 	}
 
-	// Get TCP layer
-	if l := packet.Layer(layers.LayerTypeTCP); l != nil {
-		tcpLayer = l.(*layers.TCP)
-		fiveTuple.SrcPort = uint16(tcpLayer.SrcPort)
-		fiveTuple.DstPort = uint16(tcpLayer.DstPort)
-	} else if l := packet.Layer(layers.LayerTypeUDP); l != nil {
-		// Get UDP layer
-		udpLayer = l.(*layers.UDP)
-		fiveTuple.SrcPort = uint16(udpLayer.SrcPort)
-		fiveTuple.DstPort = uint16(udpLayer.DstPort)
-	} else {
-		// Not a TCP or UDP packet, we can choose to ignore or handle it
-		return nil, fmt.Errorf("not a TCP or UDP packet")
+	// Get transport layer
+	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+		tcp, _ := tcpLayer.(*layers.TCP)
+		fiveTuple.SrcPort = uint16(tcp.SrcPort)
+		fiveTuple.DstPort = uint16(tcp.DstPort)
+	} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+		udp, _ := udpLayer.(*layers.UDP)
+		fiveTuple.SrcPort = uint16(udp.SrcPort)
+		fiveTuple.DstPort = uint16(udp.DstPort)
 	}
+	// For other protocols like ICMP, the ports will be 0, which is correct.
 
 	info.FiveTuple = fiveTuple
 
