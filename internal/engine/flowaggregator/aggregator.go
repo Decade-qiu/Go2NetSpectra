@@ -90,7 +90,7 @@ func (fa *FlowAggregator) snapshotter() {
 				// We should check if the snapshot is empty
 				hasFlows := false
 				for _, shard := range snapshot {
-					if len(shard.flows) > 0 {
+					if len(shard.Flows) > 0 {
 						hasFlows = true
 						break
 					}
@@ -109,7 +109,7 @@ func (fa *FlowAggregator) snapshotter() {
 					snapshot := subAgg.Snapshot()
 					hasFlows := false
 					for _, shard := range snapshot {
-						if len(shard.flows) > 0 {
+						if len(shard.Flows) > 0 {
 							hasFlows = true
 							break
 						}

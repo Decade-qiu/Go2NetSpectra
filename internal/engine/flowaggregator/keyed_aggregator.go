@@ -13,8 +13,8 @@ const defaultShardCount = 256
 
 // Shard is a part of a sharded map, containing its own map and a mutex.
 type Shard struct {
-	flows map[string]*model.Flow
-	mu    sync.RWMutex
+	Flows map[string]*model.Flow
+	Mu    sync.RWMutex
 }
 
 // KeyedAggregator performs aggregation for a specific set of key fields using a sharded map
@@ -36,7 +36,7 @@ func NewKeyedAggregator(name string, keyFields []string) *KeyedAggregator {
 	}
 	for i := 0; i < int(defaultShardCount); i++ {
 		agg.shards[i] = &Shard{
-			flows: make(map[string]*model.Flow),
+			Flows: make(map[string]*model.Flow),
 		}
 	}
 	return agg
@@ -80,17 +80,17 @@ func (ka *KeyedAggregator) ProcessPacket(packetInfo *model.PacketInfo) {
 	}
 
 	shard := ka.getShard(key)
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
+	shard.Mu.Lock()
+	defer shard.Mu.Unlock()
 
-	if flow, ok := shard.flows[key]; ok {
+	if flow, ok := shard.Flows[key]; ok {
 		// Flow exists, update it
 		flow.EndTime = packetInfo.Timestamp
 		flow.PacketCount++
 		flow.ByteCount += uint64(packetInfo.Length)
 	} else {
 		// Flow does not exist, create a new one
-		shard.flows[key] = &model.Flow{
+		shard.Flows[key] = &model.Flow{
 			Key:         key,
 			StartTime:   packetInfo.Timestamp,
 			EndTime:     packetInfo.Timestamp,
@@ -107,16 +107,16 @@ func (ka *KeyedAggregator) Snapshot() []*Shard {
 
 	for i := 0; i < int(ka.shardCount); i++ {
 		shard := ka.shards[i]
-		shard.mu.Lock()
+		shard.Mu.Lock()
 
-		oldFlows := shard.flows
-		shard.flows = make(map[string]*model.Flow) // Start using the new map
+		oldFlows := shard.Flows
+		shard.Flows = make(map[string]*model.Flow) // Start using the new map
 
-		shard.mu.Unlock()
+		shard.Mu.Unlock()
 
 		// The old data is now available without a lock for processing
 		oldShards[i] = &Shard{
-			flows: oldFlows,
+			Flows: oldFlows,
 		}
 	}
 	return oldShards

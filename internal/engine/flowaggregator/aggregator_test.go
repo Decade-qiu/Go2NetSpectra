@@ -74,7 +74,7 @@ func TestFlowAggregator_Snapshot(t *testing.T) {
 	for _, s := range snapshots {
         totalFlows := 0
         for _, shard := range s.Shards {
-            totalFlows += len(shard.flows)
+            totalFlows += len(shard.Flows)
         }
 		if totalFlows != 1 {
 			t.Errorf("Expected 1 flow in snapshot from aggregator '%s', but got %d", s.AggregatorName, totalFlows)
