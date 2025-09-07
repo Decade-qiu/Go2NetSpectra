@@ -5,13 +5,13 @@ import (
 	"time"
 )
 
-// FiveTuple represents the 5-tuple of a network flow.
+// FiveTuple represents the 5-tuple of a network packet.
 type FiveTuple struct {
 	SrcIP    net.IP
 	DstIP    net.IP
 	SrcPort  uint16
 	DstPort  uint16
-	Protocol uint8 // e.g., TCP, UDP
+	Protocol uint8
 }
 
 // PacketInfo holds the metadata extracted from a single packet.
@@ -21,13 +21,14 @@ type PacketInfo struct {
 	Length    int
 }
 
-// Flow represents a network flow.
+// Flow represents an aggregated flow of traffic. The definition of the flow
+// is determined by the aggregator that produces it.
 type Flow struct {
-	ID        string // A unique identifier for the flow, e.g., hash of 5-tuple
-	FiveTuple FiveTuple
-	Packets   []*PacketInfo
-	StartTime time.Time
-	EndTime   time.Time
-	ByteCount int
-	PacketCount int
+    // The value of the key(s) that defined this flow.
+    // e.g., "1.2.3.4" if aggregated by SrcIP, or "1.2.3.4:80->2.3.4.5:443" for 5-tuple.
+	Key         string
+	StartTime   time.Time
+	EndTime     time.Time
+	ByteCount   uint64
+	PacketCount uint64
 }

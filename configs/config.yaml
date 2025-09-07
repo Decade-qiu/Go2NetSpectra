@@ -1,0 +1,14 @@
+aggregator:
+  tasks:
+    - name: "by_src_ip"
+      key_fields: ["SrcIP"]
+    - name: "by_dst_ip"
+      key_fields: ["DstIP"]
+    - name: "by_src_port"
+      key_fields: ["SrcPort"]
+    - name: "by_dst_port"
+      key_fields: ["DstPort"]
+    - name: "by_protocol"
+      key_fields: ["Protocol"]
+    - name: "by_five_tuple"
+      key_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
