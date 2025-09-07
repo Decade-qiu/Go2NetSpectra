@@ -20,7 +20,9 @@ func TestFlowAggregator_Snapshot(t *testing.T) {
 
 	// 2. Create aggregator
 	numWorkers := runtime.NumCPU()
-	aggregator, err := NewFlowAggregator(cfg, numWorkers)
+	inputChanSize := 10000
+	outputChanSize := 100
+	aggregator, err := NewFlowAggregator(cfg, numWorkers, inputChanSize, outputChanSize)
 	if err != nil {
 		t.Fatalf("Failed to create aggregator: %v", err)
 	}

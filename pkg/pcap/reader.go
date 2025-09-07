@@ -3,6 +3,7 @@ package pcap
 import (
 	"Go2NetSpectra/internal/core/model"
 	"Go2NetSpectra/internal/engine/protocol"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )

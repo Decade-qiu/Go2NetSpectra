@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	
+
 	"sync"
 )
 
@@ -30,7 +30,7 @@ func main() {
 	// 3. Initialize modules
 	writer := snapshot.NewWriter()
 	numWorkers := 16
-	inputChanSize := 10000
+	inputChanSize := 4096
 	outputChanSize := 100
 	aggregator, err := flowaggregator.NewFlowAggregator(cfg, numWorkers, inputChanSize, outputChanSize)
 	if err != nil {
