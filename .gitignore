@@ -1,0 +1,21 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace directory
+vendor/
+
+# Snapshot output
+/tmp/gons_snapshots/
+
+# Large test data
+test/data/large_test.pcap
