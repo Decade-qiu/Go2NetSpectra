@@ -25,7 +25,7 @@ type FlowAggregator struct {
 }
 
 // NewFlowAggregator creates a new FlowAggregator based on the provided configuration.
-func NewFlowAggregator(cfg *config.Config, numWorkers int) (*FlowAggregator, error) {
+func NewFlowAggregator(cfg *config.Config, numWorkers int, inputChanSize, outputChanSize int) (*FlowAggregator, error) {
 	snapshotInterval, err := time.ParseDuration(cfg.Aggregator.SnapshotInterval)
 	if err != nil {
 		return nil, fmt.Errorf("invalid snapshot_interval: %w", err)
@@ -39,8 +39,8 @@ func NewFlowAggregator(cfg *config.Config, numWorkers int) (*FlowAggregator, err
 
 	return &FlowAggregator{
 		subAggregators:   subAggregators,
-		InputChannel:     make(chan *model.PacketInfo, 1000),
-		OutputChannel:    make(chan SnapshotData, 100),
+		InputChannel:     make(chan *model.PacketInfo, inputChanSize),
+		OutputChannel:    make(chan SnapshotData, outputChanSize),
 		numWorkers:       numWorkers,
 		snapshotInterval: snapshotInterval,
 	}, nil

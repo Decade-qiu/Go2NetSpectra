@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
+	
 	"sync"
 )
 
@@ -29,8 +29,10 @@ func main() {
 
 	// 3. Initialize modules
 	writer := snapshot.NewWriter()
-	numWorkers := runtime.NumCPU()
-	aggregator, err := flowaggregator.NewFlowAggregator(cfg, numWorkers)
+	numWorkers := 16
+	inputChanSize := 10000
+	outputChanSize := 100
+	aggregator, err := flowaggregator.NewFlowAggregator(cfg, numWorkers, inputChanSize, outputChanSize)
 	if err != nil {
 		log.Fatalf("Failed to create aggregator: %v", err)
 	}
