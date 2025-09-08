@@ -13,11 +13,13 @@ import (
 type ExactAggregator struct {
 	subAggregators   []*KeyedAggregator
 	inputChannel     chan *model.PacketInfo // private
-	wg               sync.WaitGroup
+	workerWg         sync.WaitGroup
+	snapshotterWg    sync.WaitGroup
 	numWorkers       int
 	snapshotInterval time.Duration
 	storageRootPath  string
 	writer           model.Writer // Changed to interface type
+	done             chan struct{}
 }
 
 // NewExactAggregator creates a new ExactAggregator that manages all "exact" aggregation tasks.
@@ -40,6 +42,7 @@ func NewExactAggregator(appCfg *config.Config) (*ExactAggregator, error) {
 		snapshotInterval: snapshotInterval,
 		storageRootPath:  appCfg.Aggregator.StorageRootPath,
 		writer:           NewExactWriter(),
+		done:             make(chan struct{}),
 	}, nil
 }
 
@@ -50,23 +53,34 @@ func (fa *ExactAggregator) Input() chan<- *model.PacketInfo {
 
 // Start launches the aggregator worker pool and the snapshotting ticker.
 func (fa *ExactAggregator) Start() {
-	fa.wg.Add(fa.numWorkers)
+	fa.workerWg.Add(fa.numWorkers)
 	for i := 0; i < fa.numWorkers; i++ {
 		go fa.worker()
 	}
-	fa.wg.Add(1)
+	fa.snapshotterWg.Add(1)
 	go fa.snapshotter()
 }
 
 // Stop waits for all workers and the snapshotter to finish.
 func (fa *ExactAggregator) Stop() {
+	// 1. Stop accepting new packets. This will cause workers to exit their loop
+	//    once the channel is empty.
 	close(fa.inputChannel)
-	fa.wg.Wait()
+
+	// 2. Wait for all workers to finish processing buffered packets.
+	fa.workerWg.Wait()
+
+	// 3. Now that all aggregation is complete, signal the snapshotter to take
+	//    a final snapshot and exit.
+	close(fa.done)
+
+	// 4. Wait for the snapshotter to finish.
+	fa.snapshotterWg.Wait()
 }
 
 // worker processes packets from the input channel.
 func (fa *ExactAggregator) worker() {
-	defer fa.wg.Done()
+	defer fa.workerWg.Done()
 	for packetInfo := range fa.inputChannel {
 		for _, subAgg := range fa.subAggregators {
 			subAgg.ProcessPacket(packetInfo)
@@ -76,7 +90,7 @@ func (fa *ExactAggregator) worker() {
 
 // snapshotter periodically triggers a snapshot of all sub-aggregators.
 func (fa *ExactAggregator) snapshotter() {
-	defer fa.wg.Done()
+	defer fa.snapshotterWg.Done()
 	ticker := time.NewTicker(fa.snapshotInterval)
 	defer ticker.Stop()
 
@@ -85,12 +99,10 @@ func (fa *ExactAggregator) snapshotter() {
 		case <-ticker.C:
 			fa.takeSnapshot()
 			log.Println("Snapshot taken at ", time.Now())
-		case _, ok := <-fa.inputChannel:
-			if !ok {
-				log.Println("Input channel closed, taking final snapshot...")
-				fa.takeSnapshot()
-				return
-			}
+		case <-fa.done:
+			fa.takeSnapshot()
+			log.Println("Final snapshot taken at shutdown ", time.Now())
+			return
 		}
 	}
 }
@@ -106,22 +118,12 @@ func (fa *ExactAggregator) takeSnapshot() {
 		go func(subAgg *KeyedAggregator) { // Fixed loop variable capture
 			defer wg.Done()
 			snapshotData := subAgg.Snapshot()
-			hasFlows := false
-			for _, shard := range snapshotData {
-				if len(shard.Flows) > 0 {
-					hasFlows = true
-					break
-				}
+			aggSnapshot := SnapshotData{
+				AggregatorName: subAgg.Name,
+				Shards:         snapshotData,
 			}
-
-			if hasFlows {
-				aggSnapshot := SnapshotData{
-					AggregatorName: subAgg.Name,
-					Shards:         snapshotData,
-				}
-				if err := fa.writer.Write(aggSnapshot, fa.storageRootPath, timestamp); err != nil {
-					log.Printf("Error writing snapshot for %s: %v", subAgg.Name, err)
-				}
+			if err := fa.writer.Write(aggSnapshot, fa.storageRootPath, timestamp); err != nil {
+				log.Printf("Error writing snapshot for %s: %v", subAgg.Name, err)
 			}
 		}(subAgg)
 	}

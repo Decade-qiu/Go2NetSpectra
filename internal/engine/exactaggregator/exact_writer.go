@@ -19,6 +19,8 @@ func init() {
 type SummaryData struct {
 	AggregatorName string `json:"aggregator_name"`
 	TotalFlows     int    `json:"total_flows"`
+	TotalBytes     uint64 `json:"total_bytes"`
+	TotalPackets   uint64 `json:"total_packets"`
 	Shards         int    `json:"shards"`
 	Timestamp      string `json:"timestamp"`
 }
@@ -49,12 +51,17 @@ func (w *ExactWriter) Write(payload interface{}, rootPath string, timestamp stri
 	}
 
 	totalFlows := 0
+	totalPackets, totalBytes := uint64(0), uint64(0)
 	// 2. Write each shard's map to a .dat file
 	for i, shard := range snapshot.Shards {
 		if len(shard.Flows) == 0 {
 			continue
 		}
 		totalFlows += len(shard.Flows)
+		for _, flow := range shard.Flows {
+			totalPackets += flow.PacketCount
+			totalBytes += flow.ByteCount
+		}
 
 		fileName := fmt.Sprintf("shard_%d.dat", i)
 		filePath := filepath.Join(aggregatorDir, fileName)
@@ -76,6 +83,8 @@ func (w *ExactWriter) Write(payload interface{}, rootPath string, timestamp stri
 		summary := SummaryData{
 			AggregatorName: snapshot.AggregatorName,
 			TotalFlows:     totalFlows,
+			TotalBytes:     totalBytes,
+			TotalPackets:   totalPackets,
 			Shards:         len(snapshot.Shards),
 			Timestamp:      time.Now().UTC().Format(time.RFC3339),
 		}
