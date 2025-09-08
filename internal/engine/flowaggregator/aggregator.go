@@ -3,29 +3,26 @@ package flowaggregator
 import (
 	"Go2NetSpectra/internal/core/model"
 	"Go2NetSpectra/internal/pkg/config"
+	"Go2NetSpectra/internal/snapshot"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
-
-// SnapshotData represents the full snapshot for a single sub-aggregator.
-type SnapshotData struct {
-	AggregatorName string
-	Shards         []*Shard
-}
 
 // FlowAggregator is the main engine that manages multiple aggregation tasks.
 type FlowAggregator struct {
 	subAggregators   []*KeyedAggregator
 	InputChannel     chan *model.PacketInfo
-	OutputChannel    chan SnapshotData // Channel for exporting snapshots
 	wg               sync.WaitGroup
 	numWorkers       int
 	snapshotInterval time.Duration
+	storageRootPath  string
+	writer           *snapshot.Writer
 }
 
 // NewFlowAggregator creates a new FlowAggregator based on the provided configuration.
-func NewFlowAggregator(cfg *config.Config, numWorkers int, inputChanSize, outputChanSize int) (*FlowAggregator, error) {
+func NewFlowAggregator(cfg *config.Config, numWorkers int) (*FlowAggregator, error) {
 	snapshotInterval, err := time.ParseDuration(cfg.Aggregator.SnapshotInterval)
 	if err != nil {
 		return nil, fmt.Errorf("invalid snapshot_interval: %w", err)
@@ -39,22 +36,20 @@ func NewFlowAggregator(cfg *config.Config, numWorkers int, inputChanSize, output
 
 	return &FlowAggregator{
 		subAggregators:   subAggregators,
-		InputChannel:     make(chan *model.PacketInfo, inputChanSize),
-		OutputChannel:    make(chan SnapshotData, outputChanSize),
+		InputChannel:     make(chan *model.PacketInfo, 10000),
 		numWorkers:       numWorkers,
 		snapshotInterval: snapshotInterval,
+		storageRootPath:  cfg.Aggregator.StorageRootPath,
+		writer:           snapshot.NewWriter(),
 	}, nil
 }
 
 // Start launches the aggregator worker pool and the snapshotting ticker.
 func (fa *FlowAggregator) Start() {
-	// Start packet processing workers
 	fa.wg.Add(fa.numWorkers)
 	for i := 0; i < fa.numWorkers; i++ {
 		go fa.worker()
 	}
-
-	// Start the snapshotting ticker
 	fa.wg.Add(1)
 	go fa.snapshotter()
 }
@@ -63,10 +58,9 @@ func (fa *FlowAggregator) Start() {
 func (fa *FlowAggregator) Stop() {
 	close(fa.InputChannel)
 	fa.wg.Wait()
-	close(fa.OutputChannel)
 }
 
-// worker is a single worker that reads from the input channel and processes packets.
+// worker processes packets from the input channel.
 func (fa *FlowAggregator) worker() {
 	defer fa.wg.Done()
 	for packetInfo := range fa.InputChannel {
@@ -85,43 +79,40 @@ func (fa *FlowAggregator) snapshotter() {
 	for {
 		select {
 		case <-ticker.C:
-			for _, subAgg := range fa.subAggregators {
-				snapshot := subAgg.Snapshot()
-				// We should check if the snapshot is empty
-				hasFlows := false
-				for _, shard := range snapshot {
-					if len(shard.Flows) > 0 {
-						hasFlows = true
-						break
-					}
-				}
-				if hasFlows {
-					fa.OutputChannel <- SnapshotData{
-						AggregatorName: subAgg.Name,
-						Shards:         snapshot,
-					}
-				}
-			}
+			fa.takeSnapshot()
 		case _, ok := <-fa.InputChannel:
 			if !ok {
-				// Input channel is closed, do a final snapshot and exit.
-				for _, subAgg := range fa.subAggregators {
-					snapshot := subAgg.Snapshot()
-					hasFlows := false
-					for _, shard := range snapshot {
-						if len(shard.Flows) > 0 {
-							hasFlows = true
-							break
-						}
-					}
-					if hasFlows {
-						fa.OutputChannel <- SnapshotData{
-							AggregatorName: subAgg.Name,
-							Shards:         snapshot,
-						}
-					}
-				}
+				log.Println("Input channel closed, taking final snapshot...")
+				fa.takeSnapshot()
 				return
+			}
+		}
+	}
+}
+
+// takeSnapshot orchestrates the process of taking and writing a snapshot.
+func (fa *FlowAggregator) takeSnapshot() {
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+	log.Printf("Starting snapshot for timestamp %s...", timestamp)
+
+	for _, subAgg := range fa.subAggregators {
+		snapshotData := subAgg.Snapshot()
+		
+		hasFlows := false
+		for _, shard := range snapshotData {
+			if len(shard.Flows) > 0 {
+				hasFlows = true
+				break
+			}
+		}
+
+		if hasFlows {
+			aggSnapshot := model.SnapshotData{
+				AggregatorName: subAgg.Name,
+				Shards:         snapshotData,
+			}
+			if err := fa.writer.Write(aggSnapshot, fa.storageRootPath, timestamp); err != nil {
+				log.Printf("Error writing snapshot for %s: %v", subAgg.Name, err)
 			}
 		}
 	}

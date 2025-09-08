@@ -6,23 +6,16 @@ import (
 	"hash/fnv"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 const defaultShardCount = 256
-
-// Shard is a part of a sharded map, containing its own map and a mutex.
-type Shard struct {
-	Flows map[string]*model.Flow
-	Mu    sync.RWMutex
-}
 
 // KeyedAggregator performs aggregation for a specific set of key fields using a sharded map
 // for improved concurrency.
 type KeyedAggregator struct {
 	Name        string
 	KeyFields   []string
-	shards      []*Shard
+	shards      []*model.Shard
 	shardCount  uint32
 }
 
@@ -31,11 +24,11 @@ func NewKeyedAggregator(name string, keyFields []string) *KeyedAggregator {
 	agg := &KeyedAggregator{
 		Name:        name,
 		KeyFields:   keyFields,
-		shards:      make([]*Shard, defaultShardCount),
+		shards:      make([]*model.Shard, defaultShardCount),
 		shardCount:  defaultShardCount,
 	}
 	for i := 0; i < int(defaultShardCount); i++ {
-		agg.shards[i] = &Shard{
+		agg.shards[i] = &model.Shard{
 			Flows: make(map[string]*model.Flow),
 		}
 	}
@@ -43,7 +36,7 @@ func NewKeyedAggregator(name string, keyFields []string) *KeyedAggregator {
 }
 
 // getShard returns the appropriate shard for a given key.
-func (ka *KeyedAggregator) getShard(key string) *Shard {
+func (ka *KeyedAggregator) getShard(key string) *model.Shard {
 	hasher := fnv.New32a()
 	hasher.Write([]byte(key))
 	return ka.shards[hasher.Sum32()%ka.shardCount]
@@ -102,8 +95,8 @@ func (ka *KeyedAggregator) ProcessPacket(packetInfo *model.PacketInfo) {
 
 // Snapshot atomically swaps the active flows map in each shard with a new empty map
 // and returns the old maps for processing.
-func (ka *KeyedAggregator) Snapshot() []*Shard {
-	oldShards := make([]*Shard, ka.shardCount)
+func (ka *KeyedAggregator) Snapshot() []*model.Shard {
+	oldShards := make([]*model.Shard, ka.shardCount)
 
 	for i := 0; i < int(ka.shardCount); i++ {
 		shard := ka.shards[i]
@@ -115,7 +108,7 @@ func (ka *KeyedAggregator) Snapshot() []*Shard {
 		shard.Mu.Unlock()
 
 		// The old data is now available without a lock for processing
-		oldShards[i] = &Shard{
+		oldShards[i] = &model.Shard{
 			Flows: oldFlows,
 		}
 	}

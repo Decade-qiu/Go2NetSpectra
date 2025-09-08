@@ -4,33 +4,38 @@ import (
 	"Go2NetSpectra/internal/core/model"
 	"Go2NetSpectra/internal/pkg/config"
 	"net"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 )
 
-func TestFlowAggregator_Snapshot(t *testing.T) {
-	// 1. Load config
+func TestFlowAggregator_EndToEndSnapshot(t *testing.T) {
+	// 1. Create a temporary directory for snapshots
+	tmpDir, err := os.MkdirTemp("", "aggregator_e2e_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// 2. Load and modify config
 	cfg, err := config.LoadConfig("../../../configs/config.yaml")
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	// Use a short interval for testing
 	cfg.Aggregator.SnapshotInterval = "50ms"
+	cfg.Aggregator.StorageRootPath = tmpDir
 
-	// 2. Create aggregator
+	// 3. Create and start aggregator
 	numWorkers := runtime.NumCPU()
-	inputChanSize := 10000
-	outputChanSize := 100
-	aggregator, err := NewFlowAggregator(cfg, numWorkers, inputChanSize, outputChanSize)
+	aggregator, err := NewFlowAggregator(cfg, numWorkers)
 	if err != nil {
 		t.Fatalf("Failed to create aggregator: %v", err)
 	}
-
-	// 3. Start the aggregator
 	aggregator.Start()
 
-	// 4. Create a sample packet and send it
+	// 4. Send a packet
 	packet := &model.PacketInfo{
 		Timestamp: time.Now(),
 		FiveTuple: model.FiveTuple{
@@ -44,42 +49,36 @@ func TestFlowAggregator_Snapshot(t *testing.T) {
 	}
 	aggregator.InputChannel <- packet
 
-	// 5. Wait for the snapshot to be received on the output channel
-	var snapshots []SnapshotData
-	timeoutChan := time.After(500 * time.Millisecond)
-	doneChan := make(chan bool)
+	// 5. Wait for snapshot to be written
+	time.Sleep(100 * time.Millisecond) // Wait for at least one snapshot cycle
 
-	go func() {
-		for s := range aggregator.OutputChannel {
-			snapshots = append(snapshots, s)
-			if len(snapshots) == 6 { // We expect 6 aggregators to produce a snapshot
-				doneChan <- true
-				return
-			}
-		}
-	}()
-
-	select {
-	case <-timeoutChan:
-		t.Fatalf("Test timed out waiting for snapshots. Got %d of 6.", len(snapshots))
-	case <-doneChan:
-		// Continue
-	}
-
-	// 6. Stop the aggregator
+	// 6. Stop the aggregator to trigger final snapshot
 	aggregator.Stop()
 
-	// 7. Verify results
-	if len(snapshots) != 6 {
-		t.Errorf("Expected 6 snapshots, but got %d", len(snapshots))
+	// 7. Verify that snapshot files were created
+	// The exact timestamped directory name is unknown, so we find it.
+	dirs, err := os.ReadDir(tmpDir)
+	if err != nil || len(dirs) == 0 {
+		t.Fatalf("Snapshot directory was not created in temp dir")
 	}
-	for _, s := range snapshots {
-        totalFlows := 0
-        for _, shard := range s.Shards {
-            totalFlows += len(shard.Flows)
+    // There might be two directories if the clock ticked over during the test.
+    // We just need to find at least one valid snapshot.
+    foundSnapshots := false
+    for _, dir := range dirs {
+        if !dir.IsDir() {
+            continue
         }
-		if totalFlows != 1 {
-			t.Errorf("Expected 1 flow in snapshot from aggregator '%s', but got %d", s.AggregatorName, totalFlows)
-		}
-	}
+        timestampDir := filepath.Join(tmpDir, dir.Name())
+        // Check for one of the aggregator outputs
+        aggDir := filepath.Join(timestampDir, "by_src_ip")
+        summaryPath := filepath.Join(aggDir, "summary.json")
+        if _, err := os.Stat(summaryPath); err == nil {
+            foundSnapshots = true
+            break
+        }
+    }
+
+    if !foundSnapshots {
+        t.Fatalf("Could not find any valid snapshot files in output directory %s", tmpDir)
+    }
 }

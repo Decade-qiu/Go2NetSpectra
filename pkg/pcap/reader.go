@@ -11,6 +11,7 @@ import (
 // Reader reads packets from a pcap file.
 type Reader struct {
 	handle *pcap.Handle
+	total, failed  int
 }
 
 // NewReader creates a new pcap reader for the given file path.
@@ -19,7 +20,7 @@ func NewReader(filePath string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Reader{handle: handle}, nil
+	return &Reader{handle: handle, total: 0, failed: 0}, nil
 }
 
 // Close closes the pcap handle.
@@ -32,11 +33,13 @@ func (r *Reader) Close() {
 func (r *Reader) ReadPackets(out chan<- *model.PacketInfo) {
 	packetSource := gopacket.NewPacketSource(r.handle, r.handle.LinkType())
 	for packet := range packetSource.Packets() {
+		r.total++
 		info, err := protocol.ParsePacket(packet.Data())
 		if err != nil {
 			// We can ignore parsing errors for now
+			r.failed++
 			continue
 		}
-		out <- info
+		out <- info	
 	}
 }

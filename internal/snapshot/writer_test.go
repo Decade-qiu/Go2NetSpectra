@@ -2,22 +2,22 @@ package snapshot
 
 import (
 	"Go2NetSpectra/internal/core/model"
-	"Go2NetSpectra/internal/engine/flowaggregator"
 	"encoding/gob"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
-func TestWriter_WriteSnapshot(t *testing.T) {
+func TestWriter_Write(t *testing.T) {
 	// 1. Create sample snapshot data
 	testFlows := make(map[string]*model.Flow)
 	testFlows["test-key"] = &model.Flow{Key: "test-key", PacketCount: 1, ByteCount: 100}
 
-	snapshotData := flowaggregator.SnapshotData{
+	snapshotData := model.SnapshotData{
 		AggregatorName: "test_aggregator",
-		Shards: []*flowaggregator.Shard{
+		Shards: []*model.Shard{
 			{
 				Flows: testFlows,
 			},
@@ -36,20 +36,15 @@ func TestWriter_WriteSnapshot(t *testing.T) {
 
 	// 3. Write the snapshot
 	writer := NewWriter()
-	err = writer.WriteSnapshot(snapshotData, tmpDir)
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+	err = writer.Write(snapshotData, tmpDir, timestamp)
 	if err != nil {
-		t.Fatalf("WriteSnapshot failed: %v", err)
+		t.Fatalf("Write failed: %v", err)
 	}
 
 	// 4. Verify directory and files
-	// The directory name is based on the current time, so we need to find it.
-	dirs, err := os.ReadDir(tmpDir)
-	if err != nil || len(dirs) != 1 || !dirs[0].IsDir() {
-		t.Fatalf("Expected one timestamped directory in temp dir, found %d", len(dirs))
-	}
-	timestampDir := filepath.Join(tmpDir, dirs[0].Name())
-    aggregatorDir := filepath.Join(timestampDir, "test_aggregator")
-
+	snapshotDir := filepath.Join(tmpDir, timestamp)
+	aggregatorDir := filepath.Join(snapshotDir, "test_aggregator")
 
 	// Check for summary.json
 	summaryPath := filepath.Join(aggregatorDir, "summary.json")
@@ -69,7 +64,6 @@ func TestWriter_WriteSnapshot(t *testing.T) {
 		t.Fatalf("shard_1.dat (empty) should not have been created")
 	}
 
-
 	// 5. Verify summary content
 	summaryBytes, err := os.ReadFile(summaryPath)
 	if err != nil {
@@ -85,7 +79,6 @@ func TestWriter_WriteSnapshot(t *testing.T) {
 	if summary.AggregatorName != "test_aggregator" {
 		t.Errorf("Expected AggregatorName to be 'test_aggregator', got '%s'", summary.AggregatorName)
 	}
-
 
 	// 6. Verify gob file content
 	gobFile, err := os.Open(shardPath)
