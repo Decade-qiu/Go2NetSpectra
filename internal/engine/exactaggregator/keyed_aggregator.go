@@ -1,4 +1,4 @@
-package flowaggregator
+package exactaggregator
 
 import (
 	"Go2NetSpectra/internal/model"
@@ -15,7 +15,7 @@ const defaultShardCount = 256
 type KeyedAggregator struct {
 	Name        string
 	KeyFields   []string
-	shards      []*model.Shard
+	shards      []*Shard
 	shardCount  uint32
 }
 
@@ -27,19 +27,19 @@ func NewKeyedAggregator(name string, keyFields []string, NumShards int) *KeyedAg
 	agg := &KeyedAggregator{
 		Name:        name,
 		KeyFields:   keyFields,
-		shards:      make([]*model.Shard, defaultShardCount),
+		shards:      make([]*Shard, defaultShardCount),
 		shardCount:  defaultShardCount,
 	}
 	for i := 0; i < int(defaultShardCount); i++ {
-		agg.shards[i] = &model.Shard{
-			Flows: make(map[string]*model.Flow),
+		agg.shards[i] = &Shard{
+			Flows: make(map[string]*Flow),
 		}
 	}
 	return agg
 }
 
 // getShard returns the appropriate shard for a given key.
-func (ka *KeyedAggregator) getShard(key string) *model.Shard {
+func (ka *KeyedAggregator) getShard(key string) *Shard {
 	hasher := fnv.New32a()
 	hasher.Write([]byte(key))
 	return ka.shards[hasher.Sum32()%ka.shardCount]
@@ -86,7 +86,7 @@ func (ka *KeyedAggregator) ProcessPacket(packetInfo *model.PacketInfo) {
 		flow.ByteCount += uint64(packetInfo.Length)
 	} else {
 		// Flow does not exist, create a new one
-		shard.Flows[key] = &model.Flow{
+		shard.Flows[key] = &Flow{
 			Key:         key,
 			StartTime:   packetInfo.Timestamp,
 			EndTime:     packetInfo.Timestamp,
@@ -98,20 +98,20 @@ func (ka *KeyedAggregator) ProcessPacket(packetInfo *model.PacketInfo) {
 
 // Snapshot atomically swaps the active flows map in each shard with a new empty map
 // and returns the old maps for processing.
-func (ka *KeyedAggregator) Snapshot() []*model.Shard {
-	oldShards := make([]*model.Shard, ka.shardCount)
+func (ka *KeyedAggregator) Snapshot() []*Shard {
+	oldShards := make([]*Shard, ka.shardCount)
 
 	for i := 0; i < int(ka.shardCount); i++ {
 		shard := ka.shards[i]
 		shard.Mu.Lock()
 
 		oldFlows := shard.Flows
-		shard.Flows = make(map[string]*model.Flow) // Start using the new map
+		shard.Flows = make(map[string]*Flow) // Start using the new map
 
 		shard.Mu.Unlock()
 
 		// The old data is now available without a lock for processing
-		oldShards[i] = &model.Shard{
+		oldShards[i] = &Shard{
 			Flows: oldFlows,
 		}
 	}

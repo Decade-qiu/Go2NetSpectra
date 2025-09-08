@@ -141,6 +141,7 @@ netspectra/
 │   ├── api/              # ns-api 服务的实现
 │   ├── config/           # 配置加载
 │   ├── engine/           # ns-engine 服务的核心实现
+│   │   ├── exactaggregator/ # 精确统计聚合器
 │   ├── logger/           # 日志封装
 │   ├── model/            # 核心数据结构
 │   ├── probe/            # ns-probe 服务的实现

@@ -1,4 +1,4 @@
-package snapshot
+package exactaggregator
 
 import (
 	"Go2NetSpectra/internal/model"
@@ -11,10 +11,11 @@ import (
 )
 
 func init() {
-	gob.Register(&model.Flow{})
+	// Register the concrete type of Flow for gob encoding/decoding.
+	gob.Register(&Flow{})
 }
 
-// SummaryData holds the metadata for a snapshot.
+// SummaryData holds the metadata for a snapshot, internal to the writer.
 type SummaryData struct {
 	AggregatorName string `json:"aggregator_name"`
 	TotalFlows     int    `json:"total_flows"`
@@ -22,17 +23,23 @@ type SummaryData struct {
 	Timestamp      string `json:"timestamp"`
 }
 
-// Writer handles writing snapshot data to disk.
-type Writer struct{}
+// ExactWriter handles writing exact aggregator snapshot data to disk.
+// It implements the model.Writer interface.
+type ExactWriter struct{}
 
-// NewWriter creates a new snapshot writer.
-func NewWriter() *Writer {
-	return &Writer{}
+// NewExactWriter creates a new writer for exact aggregation data.
+func NewExactWriter() model.Writer {
+	return &ExactWriter{}
 }
 
 // Write serializes and writes the data from a single aggregator snapshot to disk.
-// It creates a timestamped directory for the snapshot.
-func (w *Writer) Write(snapshot model.SnapshotData, rootPath string, timestamp string) error {
+// It expects the payload to be of type exactaggregator.SnapshotData.
+func (w *ExactWriter) Write(payload interface{}, rootPath string, timestamp string) error {
+	snapshot, ok := payload.(SnapshotData)
+	if !ok {
+		return fmt.Errorf("invalid payload type for ExactWriter: expected SnapshotData, got %T", payload)
+	}
+
 	// 1. Create timestamped directory
 	snapshotDir := filepath.Join(rootPath, timestamp)
 	// Let's make a subdirectory for the aggregator to avoid file name collisions

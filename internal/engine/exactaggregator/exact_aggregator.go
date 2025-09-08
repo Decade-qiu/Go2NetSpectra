@@ -1,51 +1,55 @@
-package flowaggregator
+package exactaggregator
 
 import (
-	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/snapshot"
+	"Go2NetSpectra/internal/model"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 )
 
-// FlowAggregator is the main engine that manages multiple aggregation tasks.
-type FlowAggregator struct {
+// ExactAggregator is the main engine that manages multiple aggregation tasks.
+type ExactAggregator struct {
 	subAggregators   []*KeyedAggregator
-	InputChannel     chan *model.PacketInfo
+	inputChannel     chan *model.PacketInfo // private
 	wg               sync.WaitGroup
 	numWorkers       int
 	snapshotInterval time.Duration
 	storageRootPath  string
-	writer           *snapshot.Writer
+	writer           model.Writer // Changed to interface type
 }
 
-// NewFlowAggregator creates a new FlowAggregator based on the provided configuration.
-func NewFlowAggregator(cfg *config.Config) (*FlowAggregator, error) {
-	snapshotInterval, err := time.ParseDuration(cfg.Aggregator.SnapshotInterval)
+// NewExactAggregator creates a new ExactAggregator that manages all "exact" aggregation tasks.
+func NewExactAggregator(appCfg *config.Config) (*ExactAggregator, error) {
+	snapshotInterval, err := time.ParseDuration(appCfg.Aggregator.SnapshotInterval)
 	if err != nil {
 		return nil, fmt.Errorf("invalid snapshot_interval: %w", err)
 	}
 
 	var subAggregators []*KeyedAggregator
-	for _, task := range cfg.Aggregator.Tasks {
+	for _, task := range appCfg.Aggregator.ExactTasks {
 		agg := NewKeyedAggregator(task.Name, task.KeyFields, task.NumShards)
 		subAggregators = append(subAggregators, agg)
 	}
 
-	return &FlowAggregator{
+	return &ExactAggregator{
 		subAggregators:   subAggregators,
-		InputChannel:     make(chan *model.PacketInfo, cfg.Aggregator.SizeOfPacketChannel),
-		numWorkers:       cfg.Aggregator.NumWorkers,
+		inputChannel:     make(chan *model.PacketInfo, appCfg.Aggregator.SizeOfPacketChannel),
+		numWorkers:       appCfg.Aggregator.NumWorkers,
 		snapshotInterval: snapshotInterval,
-		storageRootPath:  cfg.Aggregator.StorageRootPath,
-		writer:           snapshot.NewWriter(),
+		storageRootPath:  appCfg.Aggregator.StorageRootPath,
+		writer:           NewExactWriter(),
 	}, nil
 }
 
+// Input returns the channel to which packets should be sent for processing.
+func (fa *ExactAggregator) Input() chan<- *model.PacketInfo {
+	return fa.inputChannel
+}
+
 // Start launches the aggregator worker pool and the snapshotting ticker.
-func (fa *FlowAggregator) Start() {
+func (fa *ExactAggregator) Start() {
 	fa.wg.Add(fa.numWorkers)
 	for i := 0; i < fa.numWorkers; i++ {
 		go fa.worker()
@@ -55,15 +59,15 @@ func (fa *FlowAggregator) Start() {
 }
 
 // Stop waits for all workers and the snapshotter to finish.
-func (fa *FlowAggregator) Stop() {
-	close(fa.InputChannel)
+func (fa *ExactAggregator) Stop() {
+	close(fa.inputChannel)
 	fa.wg.Wait()
 }
 
 // worker processes packets from the input channel.
-func (fa *FlowAggregator) worker() {
+func (fa *ExactAggregator) worker() {
 	defer fa.wg.Done()
-	for packetInfo := range fa.InputChannel {
+	for packetInfo := range fa.inputChannel {
 		for _, subAgg := range fa.subAggregators {
 			subAgg.ProcessPacket(packetInfo)
 		}
@@ -71,7 +75,7 @@ func (fa *FlowAggregator) worker() {
 }
 
 // snapshotter periodically triggers a snapshot of all sub-aggregators.
-func (fa *FlowAggregator) snapshotter() {
+func (fa *ExactAggregator) snapshotter() {
 	defer fa.wg.Done()
 	ticker := time.NewTicker(fa.snapshotInterval)
 	defer ticker.Stop()
@@ -81,7 +85,7 @@ func (fa *FlowAggregator) snapshotter() {
 		case <-ticker.C:
 			fa.takeSnapshot()
 			log.Println("Snapshot taken at ", time.Now())
-		case _, ok := <-fa.InputChannel:
+		case _, ok := <-fa.inputChannel:
 			if !ok {
 				log.Println("Input channel closed, taking final snapshot...")
 				fa.takeSnapshot()
@@ -92,14 +96,14 @@ func (fa *FlowAggregator) snapshotter() {
 }
 
 // takeSnapshot orchestrates the process of taking and writing a snapshot.
-func (fa *FlowAggregator) takeSnapshot() {
+func (fa *ExactAggregator) takeSnapshot() {
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	log.Printf("Starting snapshot for timestamp %s...", timestamp)
+	log.Printf("Starting snapshot for timestamp %s... for %d sub-aggregators", timestamp, len(fa.subAggregators))
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(fa.subAggregators))
 	for _, subAgg := range fa.subAggregators {
-		go func ()  {
+		go func(subAgg *KeyedAggregator) { // Fixed loop variable capture
 			defer wg.Done()
 			snapshotData := subAgg.Snapshot()
 			hasFlows := false
@@ -111,7 +115,7 @@ func (fa *FlowAggregator) takeSnapshot() {
 			}
 
 			if hasFlows {
-				aggSnapshot := model.SnapshotData{
+				aggSnapshot := SnapshotData{
 					AggregatorName: subAgg.Name,
 					Shards:         snapshotData,
 				}
@@ -119,7 +123,7 @@ func (fa *FlowAggregator) takeSnapshot() {
 					log.Printf("Error writing snapshot for %s: %v", subAgg.Name, err)
 				}
 			}
-		}()
+		}(subAgg)
 	}
 	wg.Wait()
 	log.Printf("Snapshot stored in path %s/%s", fa.storageRootPath, timestamp)

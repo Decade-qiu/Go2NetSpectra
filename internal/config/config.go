@@ -8,7 +8,7 @@ import (
 )
 
 // AggregationTaskDef defines a single aggregation task from the config file.
-type AggregationTaskDef struct {
+type ExactAggregationTaskDef struct {
 	Name      string   `yaml:"name"`
 	NumShards int      `yaml:"num_shards"`
 	KeyFields []string `yaml:"key_fields"`
@@ -16,11 +16,11 @@ type AggregationTaskDef struct {
 
 // AggregatorConfig holds the configuration for the flow aggregator.
 type AggregatorConfig struct {
-	Tasks               []AggregationTaskDef `yaml:"tasks"`
-	SnapshotInterval    string               `yaml:"snapshot_interval"`
-	StorageRootPath     string               `yaml:"storage_root_path"`
-	NumWorkers          int                  `yaml:"num_workers"`
-	SizeOfPacketChannel int                  `yaml:"size_of_packet_channel"`
+	ExactTasks          []ExactAggregationTaskDef `yaml:"exact_tasks"`
+	SnapshotInterval    string                    `yaml:"snapshot_interval"`
+	StorageRootPath     string                    `yaml:"storage_root_path"`
+	NumWorkers          int                       `yaml:"num_workers"`
+	SizeOfPacketChannel int                       `yaml:"size_of_packet_channel"`
 }
 
 // Config is the top-level configuration struct for the entire application.

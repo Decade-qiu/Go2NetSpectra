@@ -1,8 +1,8 @@
 package main
 
 import (
-	"Go2NetSpectra/internal/engine/flowaggregator"
 	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/engine/exactaggregator"
 	"Go2NetSpectra/pkg/pcap"
 	"fmt"
 	"log"
@@ -25,11 +25,11 @@ func main() {
 	log.Println("Configuration loaded successfully.")
 
 	// 3. Initialize modules
-	aggregator, err := flowaggregator.NewFlowAggregator(cfg)
+	aggregator, err := exactaggregator.NewExactAggregator(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create aggregator: %v", err)
 	}
-	log.Println("Flow aggregator initialized.")
+	log.Println("Exact aggregator initialized.")
 
 	pcapReader, err := pcap.NewReader(pcapFilePath)
 	if err != nil {
@@ -43,7 +43,7 @@ func main() {
 	log.Println("Flow aggregator started with", cfg.Aggregator.NumWorkers, "workers.")
 
 	// 5. Start reading packets and feeding them to the aggregator
-	pcapReader.ReadPackets(aggregator.InputChannel)
+	pcapReader.ReadPackets(aggregator.Input())
 	log.Println("Finished reading all packets from pcap file.")
 
 	// 6. Graceful shutdown
