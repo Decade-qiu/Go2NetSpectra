@@ -25,8 +25,7 @@ func main() {
 	log.Println("Configuration loaded successfully.")
 
 	// 3. Initialize modules
-	numWorkers := 16 // Optimal value from previous tests
-	aggregator, err := flowaggregator.NewFlowAggregator(cfg, numWorkers)
+	aggregator, err := flowaggregator.NewFlowAggregator(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create aggregator: %v", err)
 	}
@@ -41,7 +40,7 @@ func main() {
 
 	// 4. Start the processing pipeline
 	aggregator.Start()
-	log.Println("Flow aggregator started with", numWorkers, "workers.")
+	log.Println("Flow aggregator started with", cfg.Aggregator.NumWorkers, "workers.")
 
 	// 5. Start reading packets and feeding them to the aggregator
 	pcapReader.ReadPackets(aggregator.InputChannel)

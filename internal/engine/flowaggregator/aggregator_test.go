@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 )
@@ -28,8 +27,7 @@ func TestFlowAggregator_EndToEndSnapshot(t *testing.T) {
 	cfg.Aggregator.StorageRootPath = tmpDir
 
 	// 3. Create and start aggregator
-	numWorkers := runtime.NumCPU()
-	aggregator, err := NewFlowAggregator(cfg, numWorkers)
+	aggregator, err := NewFlowAggregator(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create aggregator: %v", err)
 	}

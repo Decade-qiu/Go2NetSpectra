@@ -1,16 +1,24 @@
 aggregator:
+  num_workers: 16
+  size_of_packet_channel: 8096
   snapshot_interval: "30s"
   storage_root_path: "/tmp/gons_snapshots"
   tasks:
-    - name: "by_src_ip"
+    - name: "per_src_ip"
       key_fields: ["SrcIP"]
-    - name: "by_dst_ip"
+      num_shards: 1024
+    - name: "per_dst_ip"
       key_fields: ["DstIP"]
-    - name: "by_src_port"
+      num_shards: 1024
+    - name: "per_src_port"
       key_fields: ["SrcPort"]
-    - name: "by_dst_port"
+      num_shards: 128
+    - name: "per_dst_port"
       key_fields: ["DstPort"]
-    - name: "by_protocol"
+      num_shards: 128
+    - name: "per_protocol"
       key_fields: ["Protocol"]
-    - name: "by_five_tuple"
+      num_shards: 16
+    - name: "per_five_tuple"
       key_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
+      num_shards: 4096

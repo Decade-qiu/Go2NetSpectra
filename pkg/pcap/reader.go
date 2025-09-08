@@ -3,6 +3,7 @@ package pcap
 import (
 	"Go2NetSpectra/internal/core/model"
 	"Go2NetSpectra/internal/engine/protocol"
+	"log"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
@@ -31,6 +32,9 @@ func (r *Reader) Close() {
 // ReadPackets reads all packets from the pcap file and sends the parsed
 // PacketInfo to the provided channel.
 func (r *Reader) ReadPackets(out chan<- *model.PacketInfo) {
+	defer func() {
+		log.Println("Total packets read:", r.total, "Failed to parse:", r.failed)
+	}()
 	packetSource := gopacket.NewPacketSource(r.handle, r.handle.LinkType())
 	for packet := range packetSource.Packets() {
 		r.total++

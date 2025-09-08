@@ -20,7 +20,10 @@ type KeyedAggregator struct {
 }
 
 // NewKeyedAggregator creates a new sharded aggregator.
-func NewKeyedAggregator(name string, keyFields []string) *KeyedAggregator {
+func NewKeyedAggregator(name string, keyFields []string, NumShards int) *KeyedAggregator {
+	if NumShards <= 0 || NumShards > 65536 {
+		NumShards = defaultShardCount
+	}
 	agg := &KeyedAggregator{
 		Name:        name,
 		KeyFields:   keyFields,
