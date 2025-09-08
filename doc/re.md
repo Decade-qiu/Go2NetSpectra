@@ -74,48 +74,49 @@ Go2NetSpectra 是一个基于 Go 语言构建的、支持分布式的、高性�
 
 ### **第二部分：项目计划 (Development Process & Plan)**
 
-**里程碑 1: 核心引擎与离线分析 (MVP) - (预计 4-6 周)**
+**里程碑 1: 核心引擎与离线分析 (MVP) - ✅ 已完成**
 
   * **目标**: 验证核心数据处理能力。
-  * **交付物**:
-      * 一个命令行工具 (`ns-cli`)，可以读取 pcap 文件。
-      * 实现 `ns-engine` 的核心库：协议解析、流聚合、核心指标计算。
-      * 数据能够成功写入本地 ClickHouse 实例。
-      * 一份基础的 Grafana Dashboard，可以展示 pcap 文件的分析结果。
-      * 完成核心库的单元测试。
+  * **核心交付物**:
+      * **命令行工具 `pcap-analyzer`**: 可读取 pcap 文件，并启动高性能分析引擎。
+      * **核心处理引擎 `internal/engine`**: 实现了基于 `gopacket` 的协议解析、可配置的多维度流聚合、核心指标（包数/字节数）计算。
+      * **高性能并发设计**: 引擎采用 **Worker Pool + Channel** 模型，并通过 **分片(Sharding)** 和 **原子化快照** 技术实现了高并发、低锁竞争的数据处理与持久化。
+      * **本地存储 `internal/snapshot`**: 聚合结果以快照形式周期性地高效写入本地磁盘。
+      * **完善的单元测试**: 覆盖了数据读取、解析、聚合、写入等关键模块。
+      * **清晰的项目结构**: 对项目结构进行了重构，使其更符合 Go 社区最佳实践。
 
-**里程碑 2: 实时数据流打通 (Alpha) - (预计 4-6 周)**
+**里程碑 2: 实时数据流打通 (Alpha) - (下一步)**
 
   * **目标**: 实现端到端的实时流量监控。
   * **交付物**:
-      * `ns-probe` 服务，能从网卡抓包并将数据发送到 Kafka。
-      * `ns-engine` 服务，能从 Kafka 消费数据并处理。
-      * 搭建起 Kafka, ClickHouse, Grafana 的基础环境。
+      * `ns-probe` 服务，能从网卡抓包并将数据发送到消息队列 (如 Kafka, NATS)。
+      * `ns-engine` 服务，能从消息队列消费数据并进行实时处理。
+      * 搭建起消息队列, ClickHouse, Grafana 的基础环境。
       * Grafana 仪表盘可以准实时地（秒级延迟）展示流量数据。
 
-**里程碑 3: API 服务与产品化 (Beta) - (预计 3-5 周)**
+**里程碑 3: API 服务与产品化 (Beta)**
 
   * **目标**: 提供数据查询能力，并使系统易于部署。
   * **交付物**:
       * `ns-api` 服务，提供按维度查询流量指标的 RESTful API。
-      * 为所有服务 (`probe`, `engine`, `api`) 编写 K8S 部署文件。
-      * 提供一份 K8S + Helm 的部署指南。
-      * 完善的文档：README, API 文档, 部署指南。
+      * 为所有服务 (`probe`, `engine`, `api`) 编写容器化部署文件 (Docker & Kubernetes)。
+      * 提供一份完整的容器化部署指南。
+      * 完善的文档：API 文档, 部署指南。
 
-**里程碑 4: 分布式与高可用 (Release 1.0) - (预计 4-6 周)**
+**里程碑 4: 分布式与高可用 (Release 1.0)**
 
   * **目标**: 使系统具备生产环境的可靠性和扩展性。
   * **交付物**:
       * `ns-engine` 和 `ns-api` 实现水平扩展能力。
-      * 提供 Kubernetes 部署脚本 (Helm Chart)。
+      * 提供生产级的 Kubernetes 部署脚本 (Helm Chart)。
       * 完成系统的压力测试和稳定性测试。
       * 完善监控和告警机制（系统自身健康度）。
 
------
+----
 
-### **第三部分：Go 项目结构建议 (Go Project Structure)**
+### **第三部分：Go 项目结构 (Go Project Structure)**
 
-推荐采用经典的 **"Standard Go Project Layout"** 变体，它能很好地组织项目，实现关注点分离。
+项目结构遵循 **"Standard Go Project Layout"** 的最佳实践，并已在第一阶段完成重构。
 
 ```
 netspectra/
@@ -125,51 +126,40 @@ netspectra/
 │           └── traffic.proto
 ├── cmd/                  # 项目主应用入口
 │   ├── ns-api/           # ns-api 服务的 main.go
-│   │   └── main.go
 │   ├── ns-engine/        # ns-engine 服务的 main.go
-│   │   └── main.go
-│   └── ns-probe/         # ns-probe 服务的 main.go
-│       └── main.go
+│   ├── ns-probe/         # ns-probe 服务的 main.go (为实时采集预留)
+│   └── pcap-analyzer/    # 离线pcap分析工具的 main.go
 ├── configs/              # 配置文件模板 (config.yaml.example)
 ├── deployments/          # 部署相关文件
 │   ├── docker-compose/
-│   │   └── docker-compose.yml
 │   └── kubernetes/
-│       ├── ns-api-deployment.yaml
-│       └── ...
+├── doc/                  # 项目文档
+│   ├── re.md
+│   ├── technology.md
+│   └── milestone_1_summary.md
 ├── internal/             # 项目内部私有代码，项目核心逻辑
-│   ├── api/              # ns-api 服务的实现 (HTTP handlers, routes)
-│   ├── engine/           # ns-engine 服务的实现
-│   │   ├── pipeline/     # 数据处理流水线
-│   │   ├── protocol/     # 协议解析器
-│   │   └── storage/      # 数据库写入逻辑
+│   ├── api/              # ns-api 服务的实现
+│   ├── config/           # 配置加载
+│   ├── engine/           # ns-engine 服务的核心实现
+│   ├── logger/           # 日志封装
+│   ├── model/            # 核心数据结构
 │   ├── probe/            # ns-probe 服务的实现
-│   │   ├── capture/      # 抓包逻辑 (eBPF, AF_PACKET)
-│   │   └── publisher/    # 数据发布到 Kafka 的逻辑
-│   └── pkg/              # 项目内部共享的包
-│       ├── config/       # 配置加载
-│       ├── logger/       # 日志封装
-│       └── probestore/   # 概率数据结构 (HLL, Count-Min Sketch)
-├── pkg/                  # 可以被外部应用引用的公共库 (初期可少用或不用)
-│   └── pcap/             # 例如，一个通用的pcap解析库
-├── scripts/              # 辅助脚本 (构建、测试、部署等)
-│   ├── build.sh
-│   └── lint.sh
-├── test/                 # 集成测试、端到端测试和测试数据
+│   ├── probestore/       # (预留) 概率数据结构
+│   └── snapshot/         # 快照写入逻辑
+├── pkg/                  # 可以被外部应用引用的公共库
+│   └── pcap/             # 通用的pcap解析库
+├── scripts/              # 辅助脚本
+├── test/                 # 测试数据与集成测试
 │   └── data/
 │       └── test.pcap
-├── go.mod                # Go 模块文件
+├── go.mod
 ├── go.sum
 └── README.md
 ```
 
-**结构说明**:
+**结构说明** (已更新):
 
-  * **`/cmd`**: 清晰地分离了不同服务的启动入口，每个子目录都是一个独立的 `main` 包。
-  * **`/internal`**: 这是项目的核心。Go 编译器会保证 `internal` 目录下的代码只能被其父目录及同级目录的代码引用。这强制实现了良好的封装，防止项目内部逻辑被外部不期望地依赖。
-      * `internal/api`, `internal/engine`, `internal/probe` 分别对应三个核心服务，实现了服务间的逻辑解耦。
-      * `internal/pkg` 用于存放项目内部的公共代码，避免重复造轮子。
-  * **`/pkg`**: 用于存放可以安全地被外部项目引用的代码。如果 NetSpectra 打算提供一个 SDK 供其他应用使用，代码就应放在这里。在项目初期，可以优先使用 `internal`。
-  * **`/api`**: 集中管理所有 API 定义，无论是 gRPC/Protobuf 还是 REST/OpenAPI，都让接口定义清晰可见。
-  * **`/deployments`**: 将部署配置与应用代码分离，便于 DevOps 维护。
-  * **`/scripts`**: 自动化常用操作，提高开发效率。
+  * **`/cmd`**: 分离了不同服务的启动入口。`pcap-analyzer` 用于离线分析，`ns-probe` 为未来的实时采集预留。
+  * **`/internal`**: 项目的核心私有代码。通过重构，`config`, `model` 等内部共享包被提升至根级，消除了冗余的 `pkg` 子目录，结构更清晰。
+  * **`/pkg`**: 存放可被外部引用的库，目前 `pcap` 读取器位于此处。
+  * **`/doc`**: 存放所有项目文档，包括需求、架构设计和里程碑总结。

@@ -1,8 +1,8 @@
 package flowaggregator
 
 import (
-	"Go2NetSpectra/internal/core/model"
-	"Go2NetSpectra/internal/pkg/config"
+	"Go2NetSpectra/internal/model"
+	"Go2NetSpectra/internal/config"
 	"net"
 	"os"
 	"path/filepath"

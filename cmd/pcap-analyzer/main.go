@@ -2,7 +2,7 @@ package main
 
 import (
 	"Go2NetSpectra/internal/engine/flowaggregator"
-	"Go2NetSpectra/internal/pkg/config"
+	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/pkg/pcap"
 	"fmt"
 	"log"

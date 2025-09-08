@@ -1,7 +1,7 @@
 package flowaggregator
 
 import (
-	"Go2NetSpectra/internal/core/model"
+	"Go2NetSpectra/internal/model"
 	"fmt"
 	"hash/fnv"
 	"strconv"

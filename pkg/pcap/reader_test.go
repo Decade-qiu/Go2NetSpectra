@@ -1,7 +1,7 @@
 package pcap
 
 import (
-	"Go2NetSpectra/internal/core/model"
+	"Go2NetSpectra/internal/model"
 	"testing"
 )
 

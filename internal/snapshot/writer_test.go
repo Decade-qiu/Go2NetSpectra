@@ -1,7 +1,7 @@
 package snapshot
 
 import (
-	"Go2NetSpectra/internal/core/model"
+	"Go2NetSpectra/internal/model"
 	"encoding/gob"
 	"encoding/json"
 	"os"

@@ -1,7 +1,7 @@
 package protocol
 
 import (
-	"Go2NetSpectra/internal/core/model"
+	"Go2NetSpectra/internal/model"
 	"fmt"
 	"time"
 
