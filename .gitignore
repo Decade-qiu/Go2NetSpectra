@@ -22,3 +22,6 @@ test/data/large_test.pcap
 
 # macOS specific
 .DS_Store
+
+# All test data files
+test/data/
