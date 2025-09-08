@@ -3,13 +3,10 @@ package main
 import (
 	"Go2NetSpectra/internal/engine/flowaggregator"
 	"Go2NetSpectra/internal/pkg/config"
-	"Go2NetSpectra/internal/snapshot"
 	"Go2NetSpectra/pkg/pcap"
 	"fmt"
 	"log"
 	"os"
-
-	"sync"
 )
 
 func main() {
@@ -28,11 +25,8 @@ func main() {
 	log.Println("Configuration loaded successfully.")
 
 	// 3. Initialize modules
-	writer := snapshot.NewWriter()
-	numWorkers := 16
-	inputChanSize := 4096
-	outputChanSize := 100
-	aggregator, err := flowaggregator.NewFlowAggregator(cfg, numWorkers, inputChanSize, outputChanSize)
+	numWorkers := 16 // Optimal value from previous tests
+	aggregator, err := flowaggregator.NewFlowAggregator(cfg, numWorkers)
 	if err != nil {
 		log.Fatalf("Failed to create aggregator: %v", err)
 	}
@@ -49,29 +43,12 @@ func main() {
 	aggregator.Start()
 	log.Println("Flow aggregator started with", numWorkers, "workers.")
 
-	var wg sync.WaitGroup
-
-	// Start the snapshot writer goroutine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for s := range aggregator.OutputChannel {
-			log.Printf("Snapshot received for aggregator '%s', writing to disk...", s.AggregatorName)
-			if err := writer.WriteSnapshot(s, cfg.Aggregator.StorageRootPath); err != nil {
-				log.Printf("Error writing snapshot: %v", err)
-			}
-		}
-		log.Println("Snapshot writer finished.")
-	}()
-
-	// Start reading packets and feeding them to the aggregator
+	// 5. Start reading packets and feeding them to the aggregator
 	pcapReader.ReadPackets(aggregator.InputChannel)
 	log.Println("Finished reading all packets from pcap file.")
 
-	// 5. Graceful shutdown
+	// 6. Graceful shutdown
 	log.Println("Shutting down aggregator...")
-	aggregator.Stop() // This will close the InputChannel, which in turn stops the workers and snapshotter.
-	
-	wg.Wait() // Wait for the snapshot writer to finish processing any remaining snapshots.
+	aggregator.Stop() // This closes the InputChannel and waits for all goroutines to finish.
 	log.Println("Shutdown complete.")
 }
