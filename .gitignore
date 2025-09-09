@@ -18,4 +18,4 @@ vendor/
 .DS_Store
 
 # All test files
-test/
+test/GEMINI.md
