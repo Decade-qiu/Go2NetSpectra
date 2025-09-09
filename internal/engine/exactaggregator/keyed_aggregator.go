@@ -4,6 +4,7 @@ import (
 	"Go2NetSpectra/internal/model"
 	"fmt"
 	"hash/fnv"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -20,17 +21,18 @@ type KeyedAggregator struct {
 }
 
 // NewKeyedAggregator creates a new sharded aggregator.
-func NewKeyedAggregator(name string, keyFields []string, NumShards int) *KeyedAggregator {
+func NewKeyedAggregator(name string, keyFields []string, NumShards uint32) *KeyedAggregator {
 	if NumShards <= 0 || NumShards > 65536 {
 		NumShards = defaultShardCount
 	}
+	log.Printf("Creating KeyedAggregator '%s' with %d shards for keys: %v", name, NumShards, keyFields)
 	agg := &KeyedAggregator{
 		Name:        name,
 		KeyFields:   keyFields,
-		shards:      make([]*Shard, defaultShardCount),
-		shardCount:  defaultShardCount,
+		shards:      make([]*Shard, NumShards),
+		shardCount:  NumShards,
 	}
-	for i := 0; i < int(defaultShardCount); i++ {
+	for i := 0; i < int(NumShards); i++ {
 		agg.shards[i] = &Shard{
 			Flows: make(map[string]*Flow),
 		}

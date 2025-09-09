@@ -10,7 +10,7 @@ import (
 // AggregationTaskDef defines a single aggregation task from the config file.
 type ExactAggregationTaskDef struct {
 	Name      string   `yaml:"name"`
-	NumShards int      `yaml:"num_shards"`
+	NumShards uint32      `yaml:"num_shards"`
 	KeyFields []string `yaml:"key_fields"`
 }
 
