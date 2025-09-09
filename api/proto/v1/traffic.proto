@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "api/gen/v1;v1";
+
+// FiveTuple represents the 5-tuple of a network packet.
+message FiveTuple {
+  bytes src_ip = 1;
+  bytes dst_ip = 2;
+  uint32 src_port = 3;
+  uint32 dst_port = 4;
+  uint32 protocol = 5;
+}
+
+// PacketInfo holds the metadata extracted from a single packet.
+message PacketInfo {
+  google.protobuf.Timestamp timestamp = 1;
+  FiveTuple five_tuple = 2;
+  uint64 length = 3;
+}
