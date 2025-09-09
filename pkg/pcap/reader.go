@@ -38,7 +38,7 @@ func (r *Reader) ReadPackets(out chan<- *model.PacketInfo) {
 	packetSource := gopacket.NewPacketSource(r.handle, r.handle.LinkType())
 	for packet := range packetSource.Packets() {
 		r.total++
-		info, err := protocol.ParsePacket(packet.Data())
+		info, err := protocol.ParsePacket(packet.Data(), r.handle.LinkType())
 		if err != nil {
 			// We can ignore parsing errors for now
 			r.failed++

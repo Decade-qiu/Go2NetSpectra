@@ -10,8 +10,8 @@ import (
 )
 
 // ParsePacket uses gopacket to decode a raw packet and extract key information.
-func ParsePacket(data []byte) (*model.PacketInfo, error) {
-	packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
+func ParsePacket(data []byte, linkType layers.LinkType) (*model.PacketInfo, error) {
+	packet := gopacket.NewPacket(data, linkType, gopacket.Default)
 
 	info := &model.PacketInfo{
 		Timestamp: time.Now(), // Default to now, will be overwritten by packet metadata if available

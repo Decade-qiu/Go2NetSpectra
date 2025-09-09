@@ -1,9 +1,10 @@
 package protocol
 
 import (
+	"testing"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
-	"testing"
 )
 
 func TestParsePacket(t *testing.T) {
@@ -18,7 +19,7 @@ func TestParsePacket(t *testing.T) {
 
 	var parsedPackets int
 	for packet := range packets {
-		info, err := ParsePacket(packet.Data())
+		info, err := ParsePacket(packet.Data(), handle.LinkType())
 		if err != nil {
 			continue
 		}
