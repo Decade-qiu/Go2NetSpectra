@@ -94,6 +94,52 @@ sequenceDiagram
 
 ---
 
-## 3. 总结
+## 3. 实时处理流水线：`ns-probe`
+
+在里程碑 2 中，我们引入了实时流量处理能力。这套新的流水线与离线分析并行存在，但目标是实现对线上流量的准实时监控。
+
+### 3.1. 核心组件
+
+- **`ns-probe`**: 一个统一的命令行工具，通过 `--mode` 参数切换工作模式：
+  - **`probe` 模式**: 作为生产者，负责从网卡实时抓包，并将解析后的数据发布到消息队列。
+  - **`sub` 模式**: 作为消费者（主要用于测试和验证），负责从消息队列订阅数据并打印，验证数据链路的通畅性。
+- **NATS**: 一个轻量级、高性能的开源消息队列。我们选择 NATS 作为系统内部各组件之间传递数据包信息的核心总线，它提供了优秀的解耦能力和水平扩展潜力。
+- **Protobuf (Protocol Buffers)**: 所有在 NATS 中传输的 `PacketInfo` 消息都使用 Protobuf 进行序列化。相比 JSON，Protobuf 提供了更高效的编码效率和更严格的格式校验，是构建高性能数据管道的理想选择。
+
+### 3.2. 实时数据流转图
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Probe_Pub as ns-probe (probe模式)
+    participant NATS as NATS服务器
+    participant Probe_Sub as ns-probe (sub模式)
+
+    User->>Probe_Pub: sudo go run . --mode=probe --iface=en0
+    Probe_Pub->>NATS: 连接并准备发布
+    note right of Probe_Pub: 实时从网卡抓包并解析
+
+    User->>Probe_Sub: go run . --mode=sub
+    Probe_Sub->>NATS: 连接并订阅 gons.packets.raw
+
+    loop 持续发布
+        Probe_Pub->>NATS: Publish(proto(PacketInfo))
+    end
+
+    loop 持续接收
+        NATS-->>Probe_Sub: Push(proto(PacketInfo))
+        Probe_Sub->>Probe_Sub: 解码并打印
+    end
+```
+
+### 3.3. 技术亮点
+
+- **架构解耦**: 通过引入 NATS，我们将数据采集 (`ns-probe`) 与未来的数据处理 (`ns-engine`) 和存储完全解耦。任何服务只需要连接到 NATS，就可以消费或发布数据，极大地增强了系统的灵活性和可扩展性。
+- **统一入口**: 将 `probe` 和 `sub` 功能统一到单个 `ns-probe` 命令中，并通过 `flag` 进行切换，提升了开发和测试的便利性。
+- **高效传输**: Protobuf 的使用确保了数据在网络中传输的体积尽可能小，效率尽可能高。
+
+---
+
+## 4. 总结
 
 Go2NetSpectra 的第一阶段不仅实现了功能，更重要的是通过两次关键重构，确立了一个**接口驱动、高内聚、低耦合**的健壮技术底座。这为项目未来的功能扩展和性能演进提供了无限可能。
