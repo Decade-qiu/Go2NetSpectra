@@ -1,7 +1,7 @@
 aggregator:
   num_workers: 16
   size_of_packet_channel: 8096
-  snapshot_interval: "3600s"
+  snapshot_interval: "7200s"
   storage_root_path: "./test/res"
   exact_tasks:
     - name: "per_src_ip"
