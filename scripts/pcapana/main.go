@@ -39,7 +39,7 @@ func main() {
 	// }
 
 	for packet := range packetSource.Packets() {
-		info, err := protocol.ParsePacket(packet.Data(), handle.LinkType())
+		info, err := protocol.ParsePacket(packet)
 		if err != nil {
 			fmt.Println("Parse error:", err)
 			break

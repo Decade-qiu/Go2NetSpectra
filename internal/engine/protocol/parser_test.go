@@ -19,7 +19,7 @@ func TestParsePacket(t *testing.T) {
 
 	var parsedPackets int
 	for packet := range packets {
-		info, err := ParsePacket(packet.Data(), handle.LinkType())
+		info, err := ParsePacket(packet)
 		if err != nil {
 			continue
 		}
