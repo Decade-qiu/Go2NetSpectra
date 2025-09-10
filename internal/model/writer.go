@@ -4,5 +4,5 @@ package model
 type Writer interface {
 	// Write takes a data payload and persists it.
 	// The implementation is expected to know how to handle the payload type it receives.
-	Write(payload interface{}, rootPath string, timestamp string) error
+	Write(payload interface{}, timestamp string) error
 }
