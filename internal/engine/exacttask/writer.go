@@ -1,6 +1,7 @@
-package exactaggregator
+package exacttask
 
 import (
+	"Go2NetSpectra/internal/engine/exacttask/statistic"
 	"Go2NetSpectra/internal/model"
 	"encoding/gob"
 	"encoding/json"
@@ -12,41 +13,43 @@ import (
 
 func init() {
 	// Register the concrete type of Flow for gob encoding/decoding.
-	gob.Register(&Flow{})
+	gob.Register(&statistic.Flow{})
 }
 
 // SummaryData holds the metadata for a snapshot, internal to the writer.
 type SummaryData struct {
-	AggregatorName string `json:"aggregator_name"`
-	TotalFlows     int    `json:"total_flows"`
-	TotalBytes     uint64 `json:"total_bytes"`
-	TotalPackets   uint64 `json:"total_packets"`
-	Shards         int    `json:"shards"`
-	Timestamp      string `json:"timestamp"`
+	TaskName     string `json:"task_name"`
+	TotalFlows   int    `json:"total_flows"`
+	TotalBytes   uint64 `json:"total_bytes"`
+	TotalPackets uint64 `json:"total_packets"`
+	Shards       int    `json:"shards"`
+	Timestamp    string `json:"timestamp"`
 }
 
-// ExactWriter handles writing exact aggregator snapshot data to disk.
+// SnapshotWriter handles writing aggregation task snapshot data to disk.
 // It implements the model.Writer interface.
-type ExactWriter struct{}
-
-// NewExactWriter creates a new writer for exact aggregation data.
-func NewExactWriter() model.Writer {
-	return &ExactWriter{}
+type SnapshotWriter struct {
+	rootPath string
 }
 
-// Write serializes and writes the data from a single aggregator snapshot to disk.
-// It expects the payload to be of type exactaggregator.SnapshotData.
-func (w *ExactWriter) Write(payload interface{}, rootPath string, timestamp string) error {
-	snapshot, ok := payload.(SnapshotData)
+// NewSnapshotWriter creates a new writer for aggregation task data.
+func NewSnapshotWriter(rootPath string) model.Writer {
+	return &SnapshotWriter{rootPath: rootPath}
+}
+
+// Write serializes and writes the data from a single aggregation task snapshot to disk.
+// It expects the payload to be of type exacttask.SnapshotData.
+func (w *SnapshotWriter) Write(payload interface{}, timestamp string) error {
+	snapshot, ok := payload.(statistic.SnapshotData)
 	if !ok {
-		return fmt.Errorf("invalid payload type for ExactWriter: expected SnapshotData, got %T", payload)
+		return fmt.Errorf("invalid payload type for SnapshotWriter: expected exacttask.SnapshotData, got %T", payload)
 	}
 
 	// 1. Create timestamped directory
-	snapshotDir := filepath.Join(rootPath, timestamp)
-	// Let's make a subdirectory for the aggregator to avoid file name collisions
-	aggregatorDir := filepath.Join(snapshotDir, snapshot.AggregatorName)
-	if err := os.MkdirAll(aggregatorDir, 0755); err != nil {
+	snapshotDir := filepath.Join(w.rootPath, timestamp)
+	// Let's make a subdirectory for the task to avoid file name collisions
+	taskDir := filepath.Join(snapshotDir, snapshot.TaskName)
+	if err := os.MkdirAll(taskDir, 0755); err != nil {
 		return fmt.Errorf("failed to create snapshot directory: %w", err)
 	}
 
@@ -64,7 +67,7 @@ func (w *ExactWriter) Write(payload interface{}, rootPath string, timestamp stri
 		}
 
 		fileName := fmt.Sprintf("shard_%d.dat", i)
-		filePath := filepath.Join(aggregatorDir, fileName)
+		filePath := filepath.Join(taskDir, fileName)
 
 		file, err := os.Create(filePath)
 		if err != nil {
@@ -81,14 +84,14 @@ func (w *ExactWriter) Write(payload interface{}, rootPath string, timestamp stri
 	// 3. Write summary file if there were any flows
 	if totalFlows > 0 {
 		summary := SummaryData{
-			AggregatorName: snapshot.AggregatorName,
-			TotalFlows:     totalFlows,
-			TotalBytes:     totalBytes,
-			TotalPackets:   totalPackets,
-			Shards:         len(snapshot.Shards),
-			Timestamp:      time.Now().UTC().Format(time.RFC3339),
+			TaskName:     snapshot.TaskName,
+			TotalFlows:   totalFlows,
+			TotalBytes:   totalBytes,
+			TotalPackets: totalPackets,
+			Shards:       len(snapshot.Shards),
+			Timestamp:    time.Now().UTC().Format(time.RFC3339),
 		}
-		summaryFilePath := filepath.Join(aggregatorDir, "summary.json")
+		summaryFilePath := filepath.Join(taskDir, "summary.json")
 		summaryFile, err := os.Create(summaryFilePath)
 		if err != nil {
 			return fmt.Errorf("failed to create summary file: %w", err)

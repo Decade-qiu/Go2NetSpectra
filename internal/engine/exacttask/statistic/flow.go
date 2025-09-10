@@ -1,4 +1,4 @@
-package exactaggregator
+package statistic
 
 import (
 	"sync"
@@ -15,14 +15,14 @@ type Flow struct {
 }
 
 // Shard is a part of a sharded map, containing its own map and a mutex.
-// It is used in the snapshot data structure for the ExactAggregator.
 type Shard struct {
 	Flows map[string]*Flow
 	Mu    sync.RWMutex
 }
 
-// SnapshotData represents the full snapshot for a single sub-aggregator.
+// SnapshotData represents the full snapshot for a single exact task.
+// This is the data structure returned by the Snapshot() method.
 type SnapshotData struct {
-	AggregatorName string
-	Shards         []*Shard
+	TaskName string
+	Shards   []*Shard
 }
