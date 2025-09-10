@@ -16,6 +16,7 @@ type ExactAggregationTaskDef struct {
 
 // AggregatorConfig holds the configuration for the flow aggregator.
 type AggregatorConfig struct {
+	Type                string                    `yaml:"type"`
 	ExactTasks          []ExactAggregationTaskDef `yaml:"exact_tasks"`
 	SnapshotInterval    string                    `yaml:"snapshot_interval"`
 	StorageRootPath     string                    `yaml:"storage_root_path"`
