@@ -1,12 +1,13 @@
 package pcap
 
 import (
+	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/engine/protocol"
-	"Go2NetSpectra/internal/model"
 	"log"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Reader reads packets from a pcap file.
@@ -31,19 +32,30 @@ func (r *Reader) Close() {
 
 // ReadPackets reads all packets from the pcap file and sends the parsed
 // PacketInfo to the provided channel.
-func (r *Reader) ReadPackets(out chan<- *model.PacketInfo) {
+func (r *Reader) ReadPackets(out chan<- *v1.PacketInfo) {
 	defer func() {
 		log.Println("Total packets read:", r.total, "Failed to parse:", r.failed)
 	}()
 	packetSource := gopacket.NewPacketSource(r.handle, r.handle.LinkType())
 	for packet := range packetSource.Packets() {
 		r.total++
-		info, err := protocol.ParsePacket(packet)
+		packetInfo, err := protocol.ParsePacket(packet)
 		if err != nil {
 			// We can ignore parsing errors for now
 			r.failed++
 			continue
 		}
-		out <- info	
+		pbPacket := &v1.PacketInfo{
+			Timestamp: timestamppb.New(packetInfo.Timestamp),
+			FiveTuple: &v1.FiveTuple{
+				SrcIp:    []byte(packetInfo.FiveTuple.SrcIP),
+				DstIp:    []byte(packetInfo.FiveTuple.DstIP),
+				SrcPort:  uint32(packetInfo.FiveTuple.SrcPort),
+				DstPort:  uint32(packetInfo.FiveTuple.DstPort),
+				Protocol: uint32(packetInfo.FiveTuple.Protocol),
+			},
+			Length: uint64(packetInfo.Length),
+		}
+		out <- pbPacket	
 	}
 }
