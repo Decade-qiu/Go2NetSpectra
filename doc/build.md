@@ -54,9 +54,9 @@ go run ./cmd/pcap-analyzer/main.go ./test/data/10M.pcap
 
 ---
 
-## 4. 运行实时流量监控 (`ns-probe`)
+## 4. 运行实时流量监控
 
-这是项目的核心实时流水线，它包含一个发布者（探针）和一个订阅者（用于验证）。
+这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理数据。
 
 **操作流程**:
 
@@ -69,14 +69,14 @@ go run ./cmd/pcap-analyzer/main.go ./test/data/10M.pcap
 docker run --rm -p 4222:4222 -ti nats:latest
 ```
 
-**终端 2: 启动订阅者 (Subscriber)**
+**终端 2: 启动实时聚合引擎 (ns-engine)**
 
-订阅者连接到 NATS，并监听由探针发布的消息。
+`ns-engine` 会连接到 NATS，订阅数据并启动内部的并发处理引擎。它的行为由 `configs/config.yaml` 定义。
 ```sh
-go run ./cmd/ns-probe/main.go --mode=sub
+go run ./cmd/ns-engine/main.go
 ```
 
-**终端 3: 启动探针 (Probe)**
+**终端 3: 启动探针 (ns-probe)**
 
 探针将从指定的网络接口抓包，并发布到 NATS。请将 `<interface_name>` 替换为您的实际网卡名（如 `en0`, `eth0`）。
 
@@ -85,17 +85,26 @@ go run ./cmd/ns-probe/main.go --mode=sub
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 ```
 
-操作正确的话，您将在**终端 2** 中看到持续滚动的 `Received Packet: ...` 日志。
+操作正确的话，您将在**终端 2** (`ns-engine`) 中看到 `Manager started with...` 和周期性的 `Starting snapshot...` 日志。
 
 ---
 
 ## 5. 辅助工具
 
-### Gob 解码器
+### 5.1. Gob 解码器
 
-项目提供了一个脚本，用于解码和查看由 `pcap-analyzer` 生成的 `.dat` 快照文件的内容。
+项目提供了一个脚本，用于解码和查看由 `pcap-analyzer` 或 `ns-engine` 生成的 `.dat` 快照文件的内容。
 
 **使用方法**:
 ```sh
 go run ./scripts/gobana/main.go <path_to_dat_file>
+```
+
+### 5.2. NATS 消息验证
+
+`ns-probe` 工具内置了订阅者模式，可以用来快速验证 NATS 主题上是否有数据流过。
+
+**使用方法**:
+```sh
+go run ./cmd/ns-probe/main.go --mode=sub
 ```

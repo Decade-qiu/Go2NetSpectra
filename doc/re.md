@@ -79,25 +79,22 @@ Go2NetSpectra 是一个基于 Go 语言构建的、支持分布式的、高性�
   * **目标**: 验证核心数据处理能力。
   * **核心交付物**:
       * **命令行工具 `pcap-analyzer`**: 可读取 pcap 文件，并启动高性能分析引擎。
-      * **核心处理引擎 `internal/engine`**: 实现了基于 `gopacket` 的协议解析、可配置的多维度流聚合、核心指标（包数/字节数）计算。
-      * **高性能并发设计**: 引擎采用 **Worker Pool + Channel** 模型，并通过 **分片(Sharding)** 和 **原子化快照** 技术实现了高并发、低锁竞争的数据处理。
-      * **健壮的数据一致性保证**: 通过精心设计的**优雅停机（Graceful Shutdown）**机制，确保了在处理结束时，所有缓冲数据都被完整统计，从架构上杜绝了数据丢失的风险。
-      * **本地存储 `internal/snapshot`**: 聚合结果以快照形式周期性地高效写入本地磁盘。
-      * **完善的单元测试**: 覆盖了数据读取、解析、聚合、写入等关键模块。
-      * **清晰的项目结构**: 对项目结构进行了重构，使其更符合 Go 社区最佳实践。
+      * **可插拔的引擎架构 (`Manager` -> `Task`)**: 确立了三层引擎架构。`Manager` 作为并发调度层，`Task` 作为具体的业务逻辑执行层。通过配置文件中的 `type` 字段，可以动态创建不同类型的聚合任务，实现了高度的可扩展性。
+      * **高性能并发设计**: `Manager` 内部采用 **Worker Pool + Channel** 模型，将数据包的高效转换和分发给多个 `Task` 的过程并行化，充分利用多核CPU资源。
+      * **健壮的数据一致性保证**: 通过在 `Manager` 层实现的**优雅停机（Graceful Shutdown）**机制，确保了在处理结束时，所有缓冲数据都被完整统计，从架构上杜绝了数据丢失的风险。
+      * **本地存储 `Writer`**: 通过 `model.Writer` 接口将数据写入与聚合逻辑解耦。
 
 **里程碑 2: 实时数据流打通 (Alpha) - ✅ 部分完成**
 
-  * **目标**: 实现端到端的实时流量监控。
+  * **目标**: 实现端到端的实时流量监控原型。
   * **核心交付物**:
       * **统一的 `ns-probe` 命令行工具**: 使用 `--mode` 参数，同时支持作为探针实时抓包 (`probe`) 和作为订阅者验证 (`sub`) 的能力。
-      * **实时抓包与发布**: `probe` 模式能够从指定网卡抓包，并使用 `gopacket` 进行解析。
-      * **消息队列集成**: 探针将解析后的数据包信息通过 **Protobuf** 序列化，并发布到 **NATS** 消息队列中，实现了采集与后续处理的解耦。
-      * **模块化封装**: `publisher` 和 `subscriber` 的核心逻辑被清晰地封装在 `internal/probe` 包中，方便复用与测试。
+      * **实时抓包与发布**: `probe` 模式能够从指定网卡抓包，并将解析后的数据包通过 **Protobuf** 序列化后发布到 **NATS** 消息队列。
+      * **实时消费引擎 `ns-engine`**: 实现了 `StreamAggregator`，能够连接到 NATS 并订阅数据。它将接收到的数据送入 `Manager` 的并发处理流水线中。
+      * **模块化封装**: `probe` 和 `engine` 的核心逻辑被清晰地封装在各自的包中，职责分明。
 
   * **下一步**:
-      * 实现 `ns-engine` 服务，使其能够从 NATS 消息队列消费数据。
-      * 在 `ns-engine` 中实现一个实时的聚合器，该聚合器直接对接收到的数据包信息进行统计，并将结果写入存储（初期可先打印到控制台）。
+      * 完善 `ns-engine`，使其能够将实时聚合的结果通过 `Writer` 写入存储（初期可先写入本地文件）。
       * 为未来的数据持久化和可视化搭建基础环境（如 ClickHouse, Grafana）。
 
 **里程碑 3: API 服务与产品化 (Beta)**
@@ -133,7 +130,7 @@ netspectra/
 ├── cmd/                  # 项目主应用入口
 │   ├── ns-api/           # ns-api 服务的 main.go
 │   ├── ns-engine/        # ns-engine 服务的 main.go
-│   ├── ns-probe/         # ns-probe 服务的 main.go (为实时采集预留)
+│   ├── ns-probe/         # ns-probe 多功能工具的 main.go
 │   └── pcap-analyzer/    # 离线pcap分析工具的 main.go
 ├── configs/              # 配置文件模板 (config.yaml.example)
 ├── deployments/          # 部署相关文件
@@ -142,17 +139,15 @@ netspectra/
 ├── doc/                  # 项目文档
 │   ├── re.md
 │   ├── technology.md
-│   └── milestone_1_summary.md
+│   └── build.md
 ├── internal/             # 项目内部私有代码，项目核心逻辑
-│   ├── api/              # ns-api 服务的实现
 │   ├── config/           # 配置加载
 │   ├── engine/           # ns-engine 服务的核心实现
-│   │   ├── exactaggregator/ # 精确统计聚合器
-│   ├── logger/           # 日志封装
-│   ├── model/            # 核心数据结构
-│   ├── probe/            # ns-probe 服务的实现
-│   ├── probestore/       # (预留) 概率数据结构
-│   └── snapshot/         # 快照写入逻辑
+│   │   ├── exacttask/      # 精确统计任务的实现
+│   │   ├── manager/        # 引擎的并发调度与生命周期管理
+│   │   └── streamaggregator/ # NATS 数据流接入
+│   ├── model/            # 核心数据结构与接口 (Packet, Task, Writer)
+│   └── probe/            # ns-probe 的核心实现 (Publisher, Subscriber)
 ├── pkg/                  # 可以被外部应用引用的公共库
 │   └── pcap/             # 通用的pcap解析库
 ├── scripts/              # 辅助脚本
@@ -166,7 +161,7 @@ netspectra/
 
 **结构说明** (已更新):
 
-  * **`/cmd`**: 分离了不同服务的启动入口。`pcap-analyzer` 用于离线分析，`ns-probe` 为未来的实时采集预留。
-  * **`/internal`**: 项目的核心私有代码。通过重构，`config`, `model` 等内部共享包被提升至根级，消除了冗余的 `pkg` 子目录，结构更清晰。
-  * **`/pkg`**: 存放可被外部引用的库，目前 `pcap` 读取器位于此处。
-  * **`/doc`**: 存放所有项目文档，包括需求、架构设计和里程碑总结。
+  * **`/cmd`**: 各个二进制文件的启动入口。`ns-probe` 被设计为一个多功能工具。
+  * **`/internal`**: 项目的核心私有代码。`engine` 目录被重构为 `manager`+`task` 的清晰架构。
+  * **`/pkg`**: 存放可被外部引用的库。
+  * **`/doc`**: 存放所有项目文档。
