@@ -7,21 +7,49 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AggregationTaskDef defines a single aggregation task from the config file.
-type ExactAggregationTaskDef struct {
+// ClickHouseConfig holds the configuration for the ClickHouse writer.
+type ClickHouseConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Database string `yaml:"database"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
+// GobConfig holds the configuration for the gob file writer.
+type GobConfig struct {
+	RootPath string `yaml:"root_path"`
+}
+
+// WriterDef defines a writer configuration.
+type WriterDef struct {
+	Type             string           `yaml:"type"`
+	Enabled          bool             `yaml:"enabled"`
+	SnapshotInterval string           `yaml:"snapshot_interval"`
+	Gob              GobConfig        `yaml:"gob"`
+	ClickHouse       ClickHouseConfig `yaml:"clickhouse"`
+}
+
+// ExactTaskDef defines a single task's parameters within the exact aggregator group.
+type ExactTaskDef struct {
 	Name      string   `yaml:"name"`
-	NumShards uint32      `yaml:"num_shards"`
+	NumShards uint32   `yaml:"num_shards"`
 	KeyFields []string `yaml:"key_fields"`
 }
 
-// AggregatorConfig holds the configuration for the flow aggregator.
+// ExactAggregatorConfig holds all configuration for the "exact" aggregator type.
+type ExactAggregatorConfig struct {
+	Writers []WriterDef    `yaml:"writers"`
+	Tasks   []ExactTaskDef `yaml:"tasks"`
+}
+
+// AggregatorConfig holds the top-level aggregator settings.
 type AggregatorConfig struct {
-	Type                string                    `yaml:"type"`
-	ExactTasks          []ExactAggregationTaskDef `yaml:"exact_tasks"`
-	SnapshotInterval    string                    `yaml:"snapshot_interval"`
-	StorageRootPath     string                    `yaml:"storage_root_path"`
-	NumWorkers          int                       `yaml:"num_workers"`
-	SizeOfPacketChannel int                       `yaml:"size_of_packet_channel"`
+	Type                string                `yaml:"type"`
+	Period              string                `yaml:"period"`
+	NumWorkers          int                   `yaml:"num_workers"`
+	SizeOfPacketChannel int                   `yaml:"size_of_packet_channel"`
+	Exact               ExactAggregatorConfig `yaml:"exact"`
 }
 
 // Config is the top-level configuration struct for the entire application.
