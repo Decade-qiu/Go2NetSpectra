@@ -5,5 +5,6 @@ package model
 type Task interface {
 	ProcessPacket(packet *PacketInfo)
 	Snapshot() interface{}
+	Reset()
 	Name() string
 }
