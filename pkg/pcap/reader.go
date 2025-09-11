@@ -2,7 +2,7 @@ package pcap
 
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
-	"Go2NetSpectra/internal/engine/protocol"
+	"Go2NetSpectra/internal/protocol"
 	"log"
 
 	"github.com/google/gopacket"

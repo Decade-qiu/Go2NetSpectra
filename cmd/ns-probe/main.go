@@ -1,9 +1,9 @@
 package main
 
 import (
-	"Go2NetSpectra/internal/engine/protocol"
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/internal/probe"
+	"Go2NetSpectra/internal/protocol"
 	"flag"
 	"fmt"
 	"log"
