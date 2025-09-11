@@ -26,23 +26,29 @@ type SummaryData struct {
 	Timestamp    string `json:"timestamp"`
 }
 
-// SnapshotWriter handles writing aggregation task snapshot data to disk.
+// GobWriter handles writing aggregation task snapshot data to disk in gob format.
 // It implements the model.Writer interface.
-type SnapshotWriter struct {
+type GobWriter struct {
 	rootPath string
+	interval time.Duration
 }
 
-// NewSnapshotWriter creates a new writer for aggregation task data.
-func NewSnapshotWriter(rootPath string) model.Writer {
-	return &SnapshotWriter{rootPath: rootPath}
+// NewGobWriter creates a new writer for aggregation task data.
+func NewGobWriter(rootPath string, interval time.Duration) model.Writer {
+	return &GobWriter{rootPath: rootPath, interval: interval}
+}
+
+// GetInterval returns the configured snapshot interval for this writer.
+func (w *GobWriter) GetInterval() time.Duration {
+	return w.interval
 }
 
 // Write serializes and writes the data from a single aggregation task snapshot to disk.
-// It expects the payload to be of type exacttask.SnapshotData.
-func (w *SnapshotWriter) Write(payload interface{}, timestamp string) error {
+// It expects the payload to be of type exact.SnapshotData.
+func (w *GobWriter) Write(payload interface{}, timestamp string) error {
 	snapshot, ok := payload.(statistic.SnapshotData)
 	if !ok {
-		return fmt.Errorf("invalid payload type for SnapshotWriter: expected exacttask.SnapshotData, got %T", payload)
+		return fmt.Errorf("invalid payload type for GobWriter: expected statistic.SnapshotData, got %T", payload)
 	}
 
 	// 1. Create timestamped directory
