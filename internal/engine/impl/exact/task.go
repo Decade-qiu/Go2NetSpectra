@@ -1,7 +1,7 @@
-package exacttask
+package exact
 
 import (
-	"Go2NetSpectra/internal/engine/exacttask/statistic"
+	"Go2NetSpectra/internal/engine/impl/exact/statistic"
 	"Go2NetSpectra/internal/model"
 	"fmt"
 	"hash/fnv"

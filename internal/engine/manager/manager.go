@@ -3,7 +3,7 @@ package manager
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/exacttask"
+	"Go2NetSpectra/internal/engine/impl/exact"
 	"Go2NetSpectra/internal/model"
 	"fmt"
 	"log"
@@ -43,9 +43,9 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	switch cfg.Aggregator.Type {
 	case "exact":
 		log.Println("Initializing manager for 'exact' aggregation type.")
-		writer = exacttask.NewSnapshotWriter(cfg.Aggregator.StorageRootPath)
+		writer = exact.NewSnapshotWriter(cfg.Aggregator.StorageRootPath)
 		for _, taskCfg := range cfg.Aggregator.ExactTasks {
-			task := exacttask.New(taskCfg.Name, taskCfg.KeyFields, taskCfg.NumShards)
+			task := exact.New(taskCfg.Name, taskCfg.KeyFields, taskCfg.NumShards)
 			tasks = append(tasks, task)
 		}
 	// case "sketch":
