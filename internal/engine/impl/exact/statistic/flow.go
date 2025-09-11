@@ -8,6 +8,7 @@ import (
 // Flow represents an aggregated flow of traffic with exact metrics.
 type Flow struct {
 	Key         string
+	Fields      map[string]interface{} // Holds the actual values for the fields that make up the key.
 	StartTime   time.Time
 	EndTime     time.Time
 	ByteCount   uint64

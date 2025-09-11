@@ -10,19 +10,52 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // --- Factory Registration ---
 
 func init() {
-	factory.RegisterAggregator("exact", func(cfg *config.Config) ([]model.Task, model.Writer, error) {
-		writer := NewSnapshotWriter(cfg.Aggregator.StorageRootPath)
-		var tasks []model.Task
-		for _, taskCfg := range cfg.Aggregator.ExactTasks {
-			task := New(taskCfg.Name, taskCfg.KeyFields, taskCfg.NumShards)
-			tasks = append(tasks, task)
+	factory.RegisterAggregator("exact", func(cfg *config.Config) ([]model.Task, []model.Writer, error) {
+		exactCfg := cfg.Aggregator.Exact
+
+		// Create all enabled writers for this aggregator group
+		writers := make([]model.Writer, 0, len(exactCfg.Writers))
+		for _, writerDef := range exactCfg.Writers {
+			if !writerDef.Enabled {
+				continue
+			}
+
+			interval, err := time.ParseDuration(writerDef.SnapshotInterval)
+			if err != nil {
+				log.Printf("Warning: invalid snapshot_interval for writer type '%s': %v, skipping.", writerDef.Type, err)
+				continue
+			}
+
+			var writer model.Writer
+			switch writerDef.Type {
+			case "gob":
+				writer = NewGobWriter(writerDef.Gob.RootPath, interval)
+			case "clickhouse":
+				writer, err = NewClickHouseWriter(writerDef.ClickHouse, interval)
+				if err != nil {
+					log.Printf("Warning: failed to create writer type '%s': %v, skipping.", writerDef.Type, err)
+					continue
+				}
+			default:
+				log.Printf("Warning: unknown writer type '%s' in config, skipping.", writerDef.Type)
+				continue
+			}
+			writers = append(writers, writer)
 		}
-		return tasks, writer, nil
+
+		// Create all tasks for this aggregator group
+		tasks := make([]model.Task, len(exactCfg.Tasks))
+		for i, taskCfg := range exactCfg.Tasks {
+			tasks[i] = New(taskCfg.Name, taskCfg.KeyFields, taskCfg.NumShards)
+		}
+
+		return tasks, writers, nil
 	})
 }
 
@@ -66,7 +99,7 @@ func (t *Task) Name() string {
 
 // ProcessPacket processes a single packet, creating or updating a flow in the correct shard.
 func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
-	key, err := t.generateKey(packetInfo.FiveTuple)
+	fields, key, err := t.generateKeyAndFields(packetInfo.FiveTuple)
 	if err != nil {
 		log.Printf("Error generating key for task '%s': %v\n", t.name, err)
 		return
@@ -83,6 +116,7 @@ func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 	} else {
 		shard.Flows[key] = &statistic.Flow{
 			Key:         key,
+			Fields:      fields,
 			StartTime:   packetInfo.Timestamp,
 			EndTime:     packetInfo.Timestamp,
 			PacketCount: 1,
@@ -91,26 +125,41 @@ func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 	}
 }
 
-// Snapshot returns the current data and resets the internal state.
+// Snapshot returns a deep copy of the current aggregated data without modifying the internal state, and is safe for concurrent use.
 func (t *Task) Snapshot() interface{} {
-	oldShards := make([]*statistic.Shard, t.shardCount)
+	snapshotShards := make([]*statistic.Shard, t.shardCount)
 	for i := 0; i < int(t.shardCount); i++ {
 		shard := t.shards[i]
-		shard.Mu.Lock()
+		shard.Mu.RLock() // Use RLock for read-only access
 
-		oldFlows := shard.Flows
-		shard.Flows = make(map[string]*statistic.Flow) // Reset with a new map
+		// Deep copy the flows map
+		copiedFlows := make(map[string]*statistic.Flow, len(shard.Flows))
+		for k, v := range shard.Flows {
+			// Copy the Flow struct itself to ensure independence
+			flowCopy := *v
+			copiedFlows[k] = &flowCopy
+		}
+		shard.Mu.RUnlock()
 
-		shard.Mu.Unlock()
-
-		oldShards[i] = &statistic.Shard{
-			Flows: oldFlows,
+		snapshotShards[i] = &statistic.Shard{
+			Flows: copiedFlows,
 		}
 	}
 	return statistic.SnapshotData{
 		TaskName: t.name,
-		Shards:   oldShards,
+		Shards:   snapshotShards,
 	}
+}
+
+// Reset clears the internal state of the task, preparing for a new measurement period.
+func (t *Task) Reset() {
+	for i := 0; i < int(t.shardCount); i++ {
+		shard := t.shards[i]
+		shard.Mu.Lock()
+		shard.Flows = make(map[string]*statistic.Flow) // Reset with a new empty map
+		shard.Mu.Unlock()
+	}
+	log.Printf("Task '%s' state has been reset.", t.name)
 }
 
 // getShard returns the appropriate shard for a given key.
@@ -120,24 +169,36 @@ func (t *Task) getShard(key string) *statistic.Shard {
 	return t.shards[hasher.Sum32()%t.shardCount]
 }
 
-// generateKey creates a unique string key for a packet based on the task's KeyFields.
-func (t *Task) generateKey(ft model.FiveTuple) (string, error) {
-	var parts []string
-	for _, field := range t.keyFields {
-		switch field {
+// generateKeyAndFields creates a unique string key and a field map for a packet.
+func (t *Task) generateKeyAndFields(ft model.FiveTuple) (map[string]interface{}, string, error) {
+	parts := make([]string, len(t.keyFields))
+	fields := make(map[string]interface{}, len(t.keyFields))
+
+	for i, fieldName := range t.keyFields {
+		switch fieldName {
 		case "SrcIP":
-			parts = append(parts, ft.SrcIP.String())
+			val := ft.SrcIP.String()
+			parts[i] = val
+			fields[fieldName] = val
 		case "DstIP":
-			parts = append(parts, ft.DstIP.String())
+			val := ft.DstIP.String()
+			parts[i] = val
+			fields[fieldName] = val
 		case "SrcPort":
-			parts = append(parts, strconv.Itoa(int(ft.SrcPort)))
+			val := ft.SrcPort
+			parts[i] = strconv.Itoa(int(val))
+			fields[fieldName] = val
 		case "DstPort":
-			parts = append(parts, strconv.Itoa(int(ft.DstPort)))
+			val := ft.DstPort
+			parts[i] = strconv.Itoa(int(val))
+			fields[fieldName] = val
 		case "Protocol":
-			parts = append(parts, strconv.Itoa(int(ft.Protocol)))
+			val := ft.Protocol
+			parts[i] = strconv.Itoa(int(val))
+			fields[fieldName] = val
 		default:
-			return "", fmt.Errorf("unknown key field: %s", field)
+			return nil, "", fmt.Errorf("unknown key field: %s", fieldName)
 		}
 	}
-	return strings.Join(parts, "-"), nil
+	return fields, strings.Join(parts, "-"), nil
 }
