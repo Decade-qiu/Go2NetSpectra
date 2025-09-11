@@ -3,7 +3,7 @@ package manager
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
-	_ "Go2NetSpectra/internal/engine/impl/exact"
+	_ "Go2NetSpectra/internal/engine/impl/exact" // Registers exact task aggregator
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
 	"fmt"
@@ -13,66 +13,130 @@ import (
 	"time"
 )
 
-// Manager orchestrates a set of aggregation tasks.
-// It implements the model.Manager interface.
+// Manager orchestrates a set of aggregation tasks and their writers.
 type Manager struct {
-	tasks            []model.Task
-	snapshotInterval time.Duration
+	tasks   []model.Task
+	writers []model.Writer
 
 	// Worker pool for concurrent packet processing
 	packetChannel chan *v1.PacketInfo
 	numWorkers    int
 	workerWg      sync.WaitGroup
 
-	// Snapshot writing
-	writer           model.Writer
-	done             chan struct{}
-	snapshotterWg    sync.WaitGroup
+	// Snapshotting and Resetting resources
+	period        time.Duration // Global measurement period
+	done  		  chan struct{}
+	snapshotterWg sync.WaitGroup
+	resetterWg    sync.WaitGroup // New WaitGroup for the resetter
 }
 
 // New creates a new Manager.
 func NewManager(cfg *config.Config) (*Manager, error) {
-	snapshotInterval, err := time.ParseDuration(cfg.Aggregator.SnapshotInterval)
-	if err != nil {
-		return nil, fmt.Errorf("invalid snapshot_interval: %w", err)
-	}
-
-	var tasks []model.Task
-	var writer model.Writer
-
-	// Use the factory pattern to create tasks and writers based on config type
-	tasks, writer, err = factory.Create(cfg)
+	tasks, writers, err := factory.Create(cfg)
 	if err != nil {
 		return nil, err
 	}
 
+	period, err := time.ParseDuration(cfg.Aggregator.Period)
+	if err != nil {
+		return nil, fmt.Errorf("invalid aggregator period: %w", err)
+	}
+	if period <= 0 {
+		return nil, fmt.Errorf("aggregator period must be a positive duration")
+	}
+
 	return &Manager{
-		tasks:            tasks,
-		snapshotInterval: snapshotInterval,
-		writer:           writer,
-		done:             make(chan struct{}),
-		packetChannel:    make(chan *v1.PacketInfo, cfg.Aggregator.SizeOfPacketChannel),
-		numWorkers:       cfg.Aggregator.NumWorkers,
+		tasks:         tasks,
+		writers:       writers,
+		period:        period,
+		done:  		   make(chan struct{}),
+		packetChannel: make(chan *v1.PacketInfo, cfg.Aggregator.SizeOfPacketChannel),
+		numWorkers:    cfg.Aggregator.NumWorkers,
 	}, nil
 }
 
-// InputChannel returns the channel to which protobuf packets should be sent.
-func (m *Manager) InputChannel() chan<- *v1.PacketInfo {
-	return m.packetChannel
-}
-
-// Start begins the manager's snapshotting ticker and worker pool.
+// Start begins the manager's packet processing workers, snapshotter, and resetter goroutines.
 func (m *Manager) Start() {
-	// Start the snapshotter
-	m.snapshotterWg.Add(1)
-	go m.snapshotter()
+	// Start a dedicated snapshotter for each writer
+	for _, writer := range m.writers {
+		m.snapshotterWg.Add(1)
+		go m.runSnapshotter(writer)
+		log.Printf("Started snapshotter for a writer with interval %s", writer.GetInterval())
+	}
 
-	// Start the worker pool
+	// Start the global resetter
+	m.resetterWg.Add(1)
+	go m.runResetter()
+	log.Printf("Started global resetter with period %s", m.period)
+
+	// Start the packet processing worker pool
 	m.workerWg.Add(m.numWorkers)
 	for i := 0; i < m.numWorkers; i++ {
 		go m.worker()
 	}
 	log.Printf("Manager started with %d workers.", m.numWorkers)
+}
+
+// runSnapshotter runs a dedicated snapshot loop for a single writer.
+func (m *Manager) runSnapshotter(writer model.Writer) {
+	defer m.snapshotterWg.Done()
+	interval := writer.GetInterval()
+	if interval <= 0 {
+		log.Printf("Invalid interval %s for writer, snapshotter will not run.", interval)
+		return
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.takeSnapshotForWriter(writer)
+		case <-m.done:
+			m.takeSnapshotForWriter(writer)
+			return
+		}
+	}
+}
+
+// takeSnapshotForWriter orchestrates taking and writing a snapshot for a specific writer.
+func (m *Manager) takeSnapshotForWriter(writer model.Writer) {
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+	// Note: This concurrent snapshotting assumes that task.Snapshot() is thread-safe
+	// with respect to other snapshot calls. The current implementation is safe because
+	// it atomically swaps maps.
+	log.Printf("Taking snapshot for writer at %s for %d tasks.", timestamp, len(m.tasks))
+	for _, task := range m.tasks {
+		snapshotData := task.Snapshot()
+		if err := writer.Write(snapshotData, timestamp); err != nil {
+			log.Printf("Error writing snapshot for task %s: %v", task.Name(), err)
+		}
+	}
+}
+
+// runResetter runs a dedicated loop to reset all tasks periodically.
+func (m *Manager) runResetter() {
+	defer m.resetterWg.Done()
+	ticker := time.NewTicker(m.period)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.resetAllTasks()
+		case <-m.done:
+			log.Println("Resetter shutting down.")
+			return
+		}
+	}
+}
+
+// resetAllTasks iterates through all tasks and calls their Reset method.
+func (m *Manager) resetAllTasks() {
+	log.Printf("Resetting all tasks for new measurement period.")
+	for _, task := range m.tasks {
+		task.Reset()
+	}
 }
 
 // Stop gracefully shuts down the manager.
@@ -85,19 +149,19 @@ func (m *Manager) Stop() {
 	log.Println("Waiting for workers to finish...")
 	m.workerWg.Wait()
 
-	// 3. Signal the snapshotter to take a final snapshot and exit.
+	// 3. Signal snapshotters and resetter to take final actions and exit.
 	close(m.done)
+	log.Println("Waiting for snapshotters and resetter to finish...")
 
-	// 4. Wait for the snapshotter to finish.
+	// 4. Wait for all goroutines to complete.
 	m.snapshotterWg.Wait()
+	m.resetterWg.Wait()
 	log.Println("Manager stopped.")
 }
 
-// worker is a goroutine that consumes packets from the channel and processes them.
 func (m *Manager) worker() {
 	defer m.workerWg.Done()
 	for pbPacket := range m.packetChannel {
-		// Convert from protobuf type to internal model type
 		info := &model.PacketInfo{
 			Timestamp: pbPacket.Timestamp.AsTime(),
 			Length:    int(pbPacket.Length),
@@ -109,47 +173,12 @@ func (m *Manager) worker() {
 				Protocol: uint8(pbPacket.FiveTuple.Protocol),
 			},
 		}
-		// Feed the packet to all underlying tasks.
-		// log.Println("Processing packet:", info)
 		for _, task := range m.tasks {
 			task.ProcessPacket(info)
 		}
 	}
 }
 
-// snapshotter periodically triggers a snapshot of all tasks.
-func (m *Manager) snapshotter() {
-	defer m.snapshotterWg.Done()
-	ticker := time.NewTicker(m.snapshotInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			m.takeSnapshot()
-		case <-m.done:
-			m.takeSnapshot()
-			log.Println("Final snapshot taken at shutdown.")
-			return
-		}
-	}
-}
-
-// takeSnapshot orchestrates the process of taking and writing a snapshot.
-func (m *Manager) takeSnapshot() {
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	log.Printf("Starting snapshot for timestamp %s... for %d tasks", timestamp, len(m.tasks))
-
-	wg := sync.WaitGroup{}
-	wg.Add(len(m.tasks))
-	for _, task := range m.tasks {
-		go func(task model.Task) {
-			defer wg.Done()
-			snapshotData := task.Snapshot()
-			if err := m.writer.Write(snapshotData, timestamp); err != nil {
-				log.Printf("Error writing snapshot for %s: %v", task.Name(), err)
-			}
-		}(task)
-	}
-	wg.Wait()
+func (m *Manager) InputChannel() chan<- *v1.PacketInfo {
+	return m.packetChannel
 }
