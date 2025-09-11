@@ -22,8 +22,8 @@
 
 架构的基石是 `internal/model` 中定义的一系列核心接口：
 
-- **`model.Task`**: 定义了一个独立的、可插拔的聚合任务。任何实现了此接口的结构体，都可以被视为一个标准的计算单元，由 `Manager` 进行统一调度。
-- **`model.Writer`**: 定义了数据写入器的标准行为。这使得聚合任务无需关心数据最终被写入到哪里（本地文件、数据库等），实现了计算与存储的彻底分离。
+- **`model.Task`**: 定义了一个独立的、可插拔的聚合任务。它包含 `ProcessPacket` 用于处理数据包，`Snapshot` 用于提供当前聚合数据的只读快照，以及 `Reset` 用于清空内部状态以开始新的测量周期。任何实现了此接口的结构体，都可以被视为一个标准的计算单元，由 `Manager` 进行统一调度。
+- **`model.Writer`**: 定义了数据写入器的标准行为。它包含 `Write` 方法用于将数据持久化，以及 `GetInterval` 方法用于告知 `Manager` 其期望的快照频率。这使得聚合任务无需关心数据最终被写入到哪里（本地文件、数据库等），实现了计算与存储的彻底分离。
 
 ### 2.2. 核心实现：三层解耦模型
 
@@ -53,29 +53,63 @@ graph TD
 
 - **并发模型：Worker Pool + Channel**: `Manager` 内部启动一个可配置的 **Worker Pool** 并发地处理数据包，充分利用多核CPU资源。数据包通过 `channel` 在生产者和消费者（Worker）之间传递，实现了I/O与计算的并行。
 - **无锁并发：分片 (Sharding)**: 在 `exacttask` 内部，为了解决并发访问聚合 `map` 时的锁竞争问题，我们采用了 **分片（Sharding）** 的设计。通过对流的 Key 进行哈希，将不同流的更新压力分散到多个独立的、由独立锁保护的 `map` 中，显著提升了并发性能。
-- **原子化快照 (Atomic Snapshotting)**: 在持久化数据时，`exacttask` 采用“原子交换”策略，用一个新的空 `map` 瞬间替换掉旧的 `map`，从而让后台写入任务可以从容地、无锁地处理旧数据，而不阻塞新数据的进入。
-- **健壮性：优雅停机 (Graceful Shutdown)**: `Manager` 的 `Stop()` 方法实现了一个多阶段的关闭序列。它会先关闭输入通道，等待所有 `worker` 将缓冲数据处理完毕，最后再触发一次最终快照。这个机制**确保了每一个数据包都在程序退出前被完全统计**，实现了 100% 的数据完整性。
+- **只读快照 (Read-Only Snapshot)**: `Task` 的 `Snapshot()` 方法现在严格执行**只读操作**。它会返回当前聚合数据的**深拷贝副本**，确保在数据写入过程中，聚合任务的内部状态不会被修改，从而避免了并发写入时的数据不一致问题。
+- **周期性重置 (Periodic Reset)**: `Manager` 引入了一个独立的 `resetter` 协程，根据全局配置的 `period` 定期触发所有 `Task` 的 `Reset()` 方法。`Reset()` 方法负责原子性地清空 `Task` 的内部聚合状态，为新的测量周期做准备。这种机制将数据读取（快照）和数据清零（重置）的职责彻底分离，保证了数据在每个测量周期内的完整性和准确性。
+- **灵活的写入器调度**: 每个 `Writer` 都可以独立配置其 `snapshot_interval`。`Manager` 会为每个启用的 `Writer` 启动一个独立的 `snapshotter` 协程，按照各自的 `snapshot_interval` 频率从 `Task` 获取只读快照并进行持久化。这使得不同数据目标可以有不同的写入频率，极大地提升了系统的灵活性。
+- **健壮性：优雅停机 (Graceful Shutdown)**: `Manager` 的 `Stop()` 方法实现了一个多阶段的关闭序列。它会先关闭输入通道，等待所有 `worker` 将缓冲数据处理完毕，然后信号通知所有 `snapshotter` 和 `resetter` 协程执行最终的快照和重置操作。这个机制**确保了每一个数据包都在程序退出前被完全统计**，实现了 100% 的数据完整性。
 
-### 2.4. 扩展性亮点：插件式的聚合器工厂
+### 2.4. 扩展性亮点：插件式的聚合器工厂与灵活的写入器配置
 
 为了实现真正的“可插拔”架构，我们结合了**工厂模式**与 Go 语言的**包初始化**机制。这使得添加一个新的聚合器类型无需修改任何核心引擎代码，只需遵循约定即可，极大地提升了项目的可维护性和扩展性。
 
-`Manager` 的创建过程由配置文件 `config.yaml` 驱动。管理员可以通过 `type` 字段（如 `type: exact`）来声明使用哪种聚合引擎。`manager.NewManager` 函数会通过一个中央工厂，动态地创建出该类型对应的所有 `Task` 实例和 `Writer` 实例。
+`Manager` 的创建过程由配置文件 `config.yaml` 驱动。管理员可以通过 `type` 字段（如 `type: exact`）来声明使用哪种聚合引擎。`manager.NewManager` 函数会通过一个中央工厂，动态地创建出该类型对应的所有 `Task` 实例和**预配置的 `Writer` 实例**。
 
 #### **如何实现一个新的聚合器？**
 
 这个设计的一大亮点是为开发者提供了极简的扩展方式。要向系统中添加一个全新的聚合器（例如，一个基于 `HyperLogLog` 的估算器），开发者只需完成两个步骤：
 
-1.  **实现并注册工厂**：在你的实现包（例如 `internal/engine/impl/hll`）中，实现 `model.Task` 接口，并在包的 `init()` 函数中调用 `factory.RegisterAggregator()`，将聚合器的名字和它的构造工厂函数注册进去。
+1.  **实现并注册工厂**：在你的实现包（例如 `internal/engine/impl/hll`）中，实现 `model.Task` 接口，并在包的 `init()` 函数中调用 `factory.RegisterAggregator()`，将聚合器的名字和它的构造工厂函数注册进去。这个工厂函数现在需要返回 `Task` 实例列表和**已根据配置创建好的 `Writer` 实例列表**。
 
     ```go
     // internal/engine/impl/hll/task.go
     package hll
 
-    import "Go2NetSpectra/internal/factory"
+    import (
+        "Go2NetSpectra/internal/config"
+        "Go2NetSpectra/internal/factory"
+        "Go2NetSpectra/internal/model"
+        "time"
+    )
 
     func init() {
-        factory.RegisterAggregator("hll", newHllFactoryFunc)
+        factory.RegisterAggregator("hll", func(cfg *config.Config) ([]model.Task, []model.Writer, error) {
+            hllCfg := cfg.Aggregator.HLL // 假设HLL有自己的配置块
+
+            // 创建HLL任务实例
+            tasks := make([]model.Task, len(hllCfg.Tasks))
+            for i, taskCfg := range hllCfg.Tasks {
+                tasks[i] = NewHLLTask(taskCfg.Name, taskCfg.KeyFields) // 假设HLL任务的构造函数
+            }
+
+            // 创建并返回配置中启用的Writer实例
+            writers := make([]model.Writer, 0, len(hllCfg.Writers))
+            for _, writerDef := range hllCfg.Writers {
+                if !writerDef.Enabled {
+                    continue
+                }
+                interval, _ := time.ParseDuration(writerDef.SnapshotInterval)
+                var writer model.Writer
+                switch writerDef.Type {
+                case "gob":
+                    writer = NewGobWriter(writerDef.Gob.RootPath, interval)
+                case "clickhouse":
+                    writer, _ = NewClickHouseWriter(writerDef.ClickHouse, interval)
+                // ... 其他writer类型
+                }
+                writers = append(writers, writer)
+            }
+            return tasks, writers, nil
+        })
     }
     ```
 
@@ -89,7 +123,7 @@ graph TD
     )
     ```
 
-通过这个机制，`Manager` 与具体的 `Task` 实现完全解耦，任何开发者都可以独立开发自己的聚合器插件并轻松集成到 Go2NetSpectra 框架中。
+通过这个机制，`Manager` 与具体的 `Task` 实现完全解耦，任何开发者都可以独立开发自己的聚合器插件并轻松集成到 Go2NetSpectra 框架中。同时，每个聚合器类型可以根据其配置，灵活地创建和管理其专属的写入器，实现了高度的定制化和可扩展性。
 
 ---
 

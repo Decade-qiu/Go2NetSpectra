@@ -50,7 +50,7 @@ go run ./cmd/pcap-analyzer/main.go <pcap_file_path>
 go run ./cmd/pcap-analyzer/main.go ./test/data/10M.pcap
 ```
 
-聚合结果的快照将保存在 `configs/config.yaml` 中 `storage_root_path` 定义的路径下。
+聚合结果的快照将保存在 `configs/config.yaml` 中 `aggregator.exact.writers` 下 `type: gob` 的 `writer` 的 `gob.root_path` 定义的路径下。请注意，`aggregator.period` 定义了全局的测量周期，而每个 `writer` 的 `snapshot_interval` 则控制了其独立的快照频率。
 
 ---
 
@@ -71,7 +71,7 @@ docker run --rm -p 4222:4222 -ti nats:latest
 
 **终端 2: 启动实时聚合引擎 (ns-engine)**
 
-`ns-engine` 会连接到 NATS，订阅数据并启动内部的并发处理引擎。它的行为由 `configs/config.yaml` 定义。
+`ns-engine` 会连接到 NATS，订阅数据并启动内部的并发处理引擎。它的行为由 `configs/config.yaml` 定义，特别是 `aggregator.period` (全局测量周期) 和 `aggregator.exact.writers` (可独立启用和配置快照间隔的写入器)。
 ```sh
 go run ./cmd/ns-engine/main.go
 ```
@@ -85,7 +85,7 @@ go run ./cmd/ns-engine/main.go
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 ```
 
-操作正确的话，您将在**终端 2** (`ns-engine`) 中看到 `Manager started with...` 和周期性的 `Starting snapshot...` 日志。
+操作正确的话，您将在**终端 2** (`ns-engine`) 中看到 `Manager started with...`、周期性的 `Started snapshotter for a writer with interval...` 和 `Started global resetter with period...` 日志。
 
 ---
 
@@ -93,7 +93,7 @@ sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 
 ### 5.1. Gob 解码器
 
-项目提供了一个脚本，用于解码和查看由 `pcap-analyzer` 或 `ns-engine` 生成的 `.dat` 快照文件的内容。
+项目提供了一个脚本，用于解码和查看由 `pcap-analyzer` 或 `ns-engine` 生成的 `.dat` 快照文件的内容。这些文件由 `gob` writer 生成。
 
 **使用方法**:
 ```sh
