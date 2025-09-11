@@ -56,9 +56,40 @@ graph TD
 - **原子化快照 (Atomic Snapshotting)**: 在持久化数据时，`exacttask` 采用“原子交换”策略，用一个新的空 `map` 瞬间替换掉旧的 `map`，从而让后台写入任务可以从容地、无锁地处理旧数据，而不阻塞新数据的进入。
 - **健壮性：优雅停机 (Graceful Shutdown)**: `Manager` 的 `Stop()` 方法实现了一个多阶段的关闭序列。它会先关闭输入通道，等待所有 `worker` 将缓冲数据处理完毕，最后再触发一次最终快照。这个机制**确保了每一个数据包都在程序退出前被完全统计**，实现了 100% 的数据完整性。
 
-### 2.4. 扩展性亮点：配置驱动的工厂模式
+### 2.4. 扩展性亮点：插件式的聚合器工厂
 
-`Manager` 的创建过程采用了工厂模式，并由配置文件 `config.yaml` 驱动。管理员可以通过 `type` 字段（如 `type: exact`）来声明使用哪种聚合引擎。`manager.NewManager` 函数会读取该字段，并像一个工厂一样，动态地创建出该类型对应的所有 `Task` 实例和 `Writer` 实例。这使得在未来添加一个全新的聚合引擎，几乎不需要改动 `Manager` 的代码。
+为了实现真正的“可插拔”架构，我们结合了**工厂模式**与 Go 语言的**包初始化**机制。这使得添加一个新的聚合器类型无需修改任何核心引擎代码，只需遵循约定即可，极大地提升了项目的可维护性和扩展性。
+
+`Manager` 的创建过程由配置文件 `config.yaml` 驱动。管理员可以通过 `type` 字段（如 `type: exact`）来声明使用哪种聚合引擎。`manager.NewManager` 函数会通过一个中央工厂，动态地创建出该类型对应的所有 `Task` 实例和 `Writer` 实例。
+
+#### **如何实现一个新的聚合器？**
+
+这个设计的一大亮点是为开发者提供了极简的扩展方式。要向系统中添加一个全新的聚合器（例如，一个基于 `HyperLogLog` 的估算器），开发者只需完成两个步骤：
+
+1.  **实现并注册工厂**：在你的实现包（例如 `internal/engine/impl/hll`）中，实现 `model.Task` 接口，并在包的 `init()` 函数中调用 `factory.RegisterAggregator()`，将聚合器的名字和它的构造工厂函数注册进去。
+
+    ```go
+    // internal/engine/impl/hll/task.go
+    package hll
+
+    import "Go2NetSpectra/internal/factory"
+
+    func init() {
+        factory.RegisterAggregator("hll", newHllFactoryFunc)
+    }
+    ```
+
+2.  **激活包的初始化**：为了让 Go 编译器在程序启动时执行上述的 `init()` 函数，只需在 `manager` 包中匿名导入（blank import）你的实现包即可。
+
+    ```go
+    // internal/engine/manager/manager.go
+    import (
+        _ "Go2NetSpectra/internal/engine/impl/exact"
+        _ "Go2NetSpectra/internal/engine/impl/hll" // <-- 新增匿名导入
+    )
+    ```
+
+通过这个机制，`Manager` 与具体的 `Task` 实现完全解耦，任何开发者都可以独立开发自己的聚合器插件并轻松集成到 Go2NetSpectra 框架中。
 
 ---
 
