@@ -1,7 +1,7 @@
 package main
 
 import (
-	"Go2NetSpectra/internal/engine/protocol"
+	"Go2NetSpectra/internal/protocol"
 	"fmt"
 	"log"
 	"os"
