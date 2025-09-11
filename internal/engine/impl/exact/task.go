@@ -1,7 +1,9 @@
 package exact
 
 import (
+	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/exact/statistic"
+	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
 	"fmt"
 	"hash/fnv"
@@ -10,7 +12,19 @@ import (
 	"strings"
 )
 
-// --- Data Structures ---
+// --- Factory Registration ---
+
+func init() {
+	factory.RegisterAggregator("exact", func(cfg *config.Config) ([]model.Task, model.Writer, error) {
+		writer := NewSnapshotWriter(cfg.Aggregator.StorageRootPath)
+		var tasks []model.Task
+		for _, taskCfg := range cfg.Aggregator.ExactTasks {
+			task := New(taskCfg.Name, taskCfg.KeyFields, taskCfg.NumShards)
+			tasks = append(tasks, task)
+		}
+		return tasks, writer, nil
+	})
+}
 
 // --- Task Implementation ---
 
