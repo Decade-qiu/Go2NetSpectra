@@ -100,18 +100,35 @@ func (m *Manager) runSnapshotter(writer model.Writer) {
 }
 
 // takeSnapshotForWriter orchestrates taking and writing a snapshot for a specific writer.
+// Warning: 
+// In this implementation, different tasks may complete their snapshotting at different times.
+// This means that the snapshot data written for a given timestamp may not represent
+// a perfectly synchronized view across all tasks. If strict synchronization is required,
+// additional coordination would be needed.
 func (m *Manager) takeSnapshotForWriter(writer model.Writer) {
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
 	// Note: This concurrent snapshotting assumes that task.Snapshot() is thread-safe
 	// with respect to other snapshot calls. The current implementation is safe because
 	// it atomically swaps maps.
 	log.Printf("Taking snapshot for writer at %s for %d tasks.", timestamp, len(m.tasks))
+
+	var wg sync.WaitGroup
+	wg.Add(len(m.tasks)) // Wait for all tasks to finish snapshotting
+
 	for _, task := range m.tasks {
-		snapshotData := task.Snapshot()
-		if err := writer.Write(snapshotData, timestamp); err != nil {
-			log.Printf("Error writing snapshot for task %s: %v", task.Name(), err)
-		}
+		go func(t model.Task) {
+			defer wg.Done()
+			snapshotData := task.Snapshot()
+			if err := writer.Write(snapshotData, timestamp); err != nil {
+				log.Printf("Error writing snapshot for task %s: %v", task.Name(), err)
+			}
+		}(task)
 	}
+
+	wg.Wait() // Wait for all tasks to complete
+
+	timestamp = time.Now().Format("2006-01-02_15-04-05")
+	log.Printf("Completed snapshot for writer at %s.", timestamp)
 }
 
 // runResetter runs a dedicated loop to reset all tasks periodically.
@@ -132,11 +149,27 @@ func (m *Manager) runResetter() {
 }
 
 // resetAllTasks iterates through all tasks and calls their Reset method.
+// Warning: 
+// In this implementation, different tasks may complete their resetting at different times.
+// This means that the reset operation does not happen simultaneously across all tasks.
+// So in next measurement period, tasks may start from slightly different states.
+// i.e., some tasks may record more packets than others.
 func (m *Manager) resetAllTasks() {
-	log.Printf("Resetting all tasks for new measurement period.")
+	log.Printf("Resetting all tasks for new measurement period at %s for %d tasks.", time.Now().Format("2006-01-02_15-04-05"), len(m.tasks))
+
+	var wg sync.WaitGroup
+	wg.Add(len(m.tasks)) // Wait for all tasks to finish resetting
+
 	for _, task := range m.tasks {
-		task.Reset()
+		go func(t model.Task) {
+			defer wg.Done()
+			task.Reset()
+		}(task)
 	}
+
+	wg.Wait() // Wait for all tasks to complete
+
+	log.Println("All tasks have been reset at ", time.Now().Format("2006-01-02_15-04-05"))
 }
 
 // Stop gracefully shuts down the manager.
