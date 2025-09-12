@@ -6,7 +6,7 @@ aggregator:
 
   # The overall measurement period. At the end of each period, all task data is reset.
   # This should be longer than or equal to the longest writer snapshot_interval.
-  period: "10m"
+  period: "720h"
 
   # Global settings for the aggregator engine
 
@@ -20,19 +20,23 @@ aggregator:
     # All tasks within this block share this snapshot interval and writer list.
     writers:
       - type: "gob"
-        enabled: true
+        enabled: false
         snapshot_interval: "3600s"
         gob:
           root_path: "test/res"
       - type: "clickhouse"
-        enabled: false
-        snapshot_interval: "3600s"
+        enabled: true
+        snapshot_interval: "30s"
+        # ClickHouse connection settings
+        # you can run a local ClickHouse server with:
+        # docker run -d -p 18123:8123 -p19000:9000 -e CLICKHOUSE_PASSWORD=123 --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
+        # echo 'SELECT version()' | curl 'http://localhost:18123/?password=123' --data-binary @-
         clickhouse:
           host: "localhost"
-          port: 9000
+          port: 19000
           database: "default"
           username: "default"
-          password: ""
+          password: "123"
     # List of specific aggregation tasks to run.
     tasks:
         - name: "per_src_ip"
