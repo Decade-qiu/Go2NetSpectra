@@ -10,13 +10,13 @@
 
 - **Go**: 版本 `1.21` 或更高。请通过 `go version` 命令确认。
 - **Protobuf Compiler (`protoc`)**: 用于将 `.proto` 文件编译成 Go 代码。请从 [Protobuf GitHub Releases](https://github.com/protocolbuffers/protobuf/releases) 下载并安装。
-- **Docker**: 用于快速启动 NATS 等依赖服务。请确保 Docker 服务正在运行。
+- **Docker**: 用于快速启动 NATS、ClickHouse 等依赖服务。请确保 Docker 服务正在运行。
 
 ---
 
 ## 2. 生成 Protobuf 代码
 
-项目使用 Protobuf 来定义跨服务传输的数据结构。在初次克隆项目或修改了 `api/proto/v1/traffic.proto` 文件后，您需要重新生成 Go 代码。
+项目使用 Protobuf 来定义跨服务传输的数据结构。在初次克隆项目或修改了 `api/proto/v1/` 目录下的 `.proto` 文件后，您需要重新生成 Go 代码。
 
 **第一步：安装 Go 插件**
 
@@ -27,12 +27,12 @@ go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
 
 **第二步：生成代码**
 
-在项目根目录下，执行以下命令：
+在项目根目录下，执行以下命令来生成所有 `.proto` 文件：
 ```sh
-protoc --proto_path=api/proto --go_out=. api/proto/v1/traffic.proto
+protoc --proto_path=api/proto --go_out=. api/proto/v1/*.proto
 ```
 
-命令成功后，会在 `api/gen/v1/` 目录下生成或更新 `traffic.pb.go` 文件。
+命令成功后，会在 `api/gen/v1/` 目录下生成或更新对应的 `.pb.go` 文件。
 
 ---
 
@@ -54,7 +54,7 @@ go run ./cmd/pcap-analyzer/main.go ./test/data/10M.pcap
 
 ---
 
-## 4. 运行实时流量监控
+## 4. 运行实时数据采集与处理
 
 这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理数据。
 
@@ -89,9 +89,68 @@ sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 
 ---
 
-## 5. 辅助工具
+## 5. 运行 API 服务与查询
 
-### 5.1. Gob 解码器
+`ns-api` 服务提供 RESTful API 用于查询 ClickHouse 中的聚合数据。
+
+### 5.1. 启动依赖服务 (ClickHouse)
+
+使用 Docker 启动一个 ClickHouse 服务器实例。请注意，我们将主机的 `19000` 端口映射到容器的 `9000` 端口，并设置了密码。
+
+```sh
+docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=123 --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
+```
+
+### 5.2. 配置 `ns-engine`
+
+确保您的 `configs/config.yaml` 文件中，`clickhouse` writer 已被启用并配置了正确的密码：
+
+```yaml
+# ...
+      - type: "clickhouse"
+        enabled: true
+        snapshot_interval: "60s"
+        clickhouse:
+          host: "localhost"
+          port: 19000  # <-- 确保端口与 docker run 命令中的映射一致
+          database: "default"
+          username: "default"
+          password: "123" # <-- 确保密码与 docker run 命令中的设置一致
+# ...
+```
+
+### 5.3. 启动 `ns-api` 服务
+
+在项目根目录下运行：
+```sh
+go run ./cmd/ns-api/main.go
+```
+您应该会看到日志 `API server starting on :8080`。
+
+### 5.4. 发送查询请求
+
+项目在 `scripts/query/` 目录下提供了一个多功能查询工具。
+
+*   **通过 API 查询 (默认模式)**:
+    ```sh
+    go run ./scripts/query/main.go
+    ```
+
+*   **通过 API 查询特定任务**: 
+    ```sh
+    go run ./scripts/query/main.go -mode=api -task=per_src_ip
+    ```
+
+*   **直接查询 ClickHouse (用于验证)**:
+    ```sh
+    go run ./scripts/query/main.go -mode=direct -task=per_five_tuple
+    ```
+
+---
+
+## 6. 辅助工具
+
+### 6.1. Gob 解码器
 
 项目提供了一个脚本，用于解码和查看由 `pcap-analyzer` 或 `ns-engine` 生成的 `.dat` 快照文件的内容。这些文件由 `gob` writer 生成。
 
@@ -100,7 +159,7 @@ sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 go run ./scripts/gobana/main.go <path_to_dat_file>
 ```
 
-### 5.2. NATS 消息验证
+### 6.2. NATS 消息验证
 
 `ns-probe` 工具内置了订阅者模式，可以用来快速验证 NATS 主题上是否有数据流过。
 
