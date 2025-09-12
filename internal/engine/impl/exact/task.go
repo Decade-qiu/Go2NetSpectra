@@ -10,6 +10,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -125,41 +126,67 @@ func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 	}
 }
 
-// Snapshot returns a deep copy of the current aggregated data without modifying the internal state, and is safe for concurrent use.
+// Snapshot returns a deep copy of the current aggregated data.
+// Suitable for write-heavy, read-light scenarios.
+// Concurrent writes are safe; snapshot reflects a consistent state at the moment of call.
 func (t *Task) Snapshot() interface{} {
-	snapshotShards := make([]*statistic.Shard, t.shardCount)
-	for i := 0; i < int(t.shardCount); i++ {
-		shard := t.shards[i]
-		shard.Mu.RLock() // Use RLock for read-only access
+    snapshotShards := make([]*statistic.Shard, t.shardCount)
+    var wg sync.WaitGroup
+    wg.Add(int(t.shardCount)) // Wait for all shards to finish copying
 
-		// Deep copy the flows map
-		copiedFlows := make(map[string]*statistic.Flow, len(shard.Flows))
-		for k, v := range shard.Flows {
-			// Copy the Flow struct itself to ensure independence
-			flowCopy := *v
-			copiedFlows[k] = &flowCopy
-		}
-		shard.Mu.RUnlock()
+    for i := 0; i < int(t.shardCount); i++ {
+        go func(i int) {
+            defer wg.Done()
 
-		snapshotShards[i] = &statistic.Shard{
-			Flows: copiedFlows,
-		}
-	}
-	return statistic.SnapshotData{
-		TaskName: t.name,
-		Shards:   snapshotShards,
-	}
+            shard := t.shards[i]
+
+            // Acquire read lock to safely read shard.Flows
+            // Allows concurrent reads but blocks writes
+            shard.Mu.RLock()
+
+            // Deep copy the flows map to ensure the snapshot is independent
+            copiedFlows := make(map[string]*statistic.Flow, len(shard.Flows))
+            for k, v := range shard.Flows {
+                // Copy each Flow struct to ensure modifications to original Flow
+                // do not affect the snapshot
+                flowCopy := *v
+                copiedFlows[k] = &flowCopy
+            }
+
+            shard.Mu.RUnlock() // Release read lock
+
+            // Store the shard snapshot
+            snapshotShards[i] = &statistic.Shard{
+                Flows: copiedFlows,
+            }
+        }(i)
+    }
+
+    wg.Wait() // Wait until all shard snapshots are complete
+
+    // Return the full snapshot
+    return statistic.SnapshotData{
+        TaskName: t.name,
+        Shards:   snapshotShards,
+    }
 }
 
 // Reset clears the internal state of the task, preparing for a new measurement period.
 func (t *Task) Reset() {
+	var wait sync.WaitGroup
+	wait.Add(int(t.shardCount)) // Wait for all shards to be reset
+
 	for i := 0; i < int(t.shardCount); i++ {
-		shard := t.shards[i]
-		shard.Mu.Lock()
-		shard.Flows = make(map[string]*statistic.Flow) // Reset with a new empty map
-		shard.Mu.Unlock()
+		go func (i int) {
+			defer wait.Done()
+			shard := t.shards[i]
+			shard.Mu.Lock()
+			shard.Flows = make(map[string]*statistic.Flow) // Reset with a new empty map
+			shard.Mu.Unlock()
+		}(i)
 	}
-	log.Printf("Task '%s' state has been reset.", t.name)
+
+	wait.Wait() // Wait until all shards are reset
 }
 
 // getShard returns the appropriate shard for a given key.
