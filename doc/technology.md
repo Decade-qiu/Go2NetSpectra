@@ -158,6 +158,17 @@ graph TD
     2.  **结构化数据载体**: 我们在 `statistic.Flow` 结构体中增加了一个 `map[string]interface{}` 类型的 `Fields` 字段。当一个 `Flow` 被创建时，构成其聚合键的实际字段和值会被存入这个 `map` 中。
     3.  **写入时动态映射**: `ClickHouseWriter` 在写入数据时，会遍历 `Flow` 的 `Fields` map，并将其中的值动态地映射到 `flow_metrics` 表对应的列中。对于 `Fields` map 中不存在的字段，数据库将自动填充为 `NULL`。这个方案不仅解决了动态存储的问题，还使得跨不同聚合任务的复杂查询成为可能。
 
+### 挑战四：ClickHouse 查询的复杂性与正确性
+
+- **问题描述**: 由于 `ns-engine` 会在每个 `snapshot_interval` 周期性地写入全量快照，导致 `flow_metrics` 表中存在大量重复的、历史性的流记录。直接使用 `SUM()` 等聚合函数会导致结果被严重夸大。如何从这些包含历史状态的数据中，查询出准确的、去重后的聚合结果？
+
+- **解决方案：使用 `argMax` 函数进行去重**
+    1.  **`argMax` 的应用**: 我们利用了 ClickHouse 强大的 `argMax(arg, val)` 函数。这个函数能返回 `val` 值最大时对应的 `arg` 的值。我们用它来“去重”：`argMax(ByteCount, Timestamp)` 会返回具有最新 `Timestamp` 的那条记录的 `ByteCount` 值。
+    2.  **子查询与两阶段聚合**: 我们的最终查询采用了一个两阶段的聚合模式：
+        *   **内层子查询**: 首先，按流的唯一标识（`TaskName` 加上所有可能的键字段）进行 `GROUP BY`。在每个流的分组内，使用 `argMax` 找出该流最新的 `ByteCount` 和 `PacketCount`。
+        *   **外层查询**: 然后，对外层查询的结果（即所有流的最新状态集合）进行最终的 `SUM()` 聚合，从而得到准确的总量统计。
+    3.  **语法陷阱**: 在实现过程中，我们还解决了 ClickHouse 的一些语法陷阱，例如 `GROUP BY` 子句中不能包含聚合函数的别名，以及 `SELECT` 子句中非聚合列必须出现在 `GROUP BY` 子句中等问题。
+
 ---
 
 ## 3. 应用场景与数据流
@@ -194,9 +205,9 @@ sequenceDiagram
     Analyzer-->>User: 处理完成, 程序退出
 ```
 
-### 3.2. 实时监控：`ns-probe` 与 `ns-engine`
+### 3.2. 实时监控与查询
 
-这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理数据，并通过 NATS 进行解耦。
+这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理并写入 ClickHouse，`ns-api` 提供查询服务。
 
 ```mermaid
 sequenceDiagram
@@ -204,23 +215,25 @@ sequenceDiagram
     participant Probe as ns-probe
     participant NATS as NATS服务器
     participant Engine as ns-engine
+    participant ClickHouse as ClickHouse数据库
+    participant API as ns-api
 
-    User->>Probe: sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=en0
-    Probe->>NATS: 连接并准备发布
-    note right of Probe: 实时从网卡抓包并解析
+    User->>Probe: 启动探针
+    Probe->>NATS: Publish(PacketInfo)
 
-    User->>Engine: go run ./cmd/ns-engine/main.go
-    Engine->>NATS: 连接并订阅 gons.packets.raw
-    note right of Engine: 内部启动 Manager 和 Worker Pool
-
-    loop 持续发布
-        Probe->>NATS: Publish(proto(PacketInfo))
+    User->>Engine: 启动引擎
+    Engine->>NATS: Subscribe(PacketInfo)
+    loop 定时快照
+        Engine->>ClickHouse: 批量写入聚合数据
     end
 
-    loop 持续接收与处理
-        NATS-->>Engine: Push(proto(PacketInfo))
-        note right of Engine: StreamAggregator -> Manager -> Tasks
-    end
+    User->>API: 启动API服务
+    API->>ClickHouse: 连接数据库
+
+    User->>API: 发送聚合查询请求 (HTTP POST)
+    API->>ClickHouse: 执行 SQL 查询 (使用 argMax)
+    ClickHouse-->>API: 返回查询结果
+    API-->>User: 返回 JSON 响应
 ```
 
 ---
