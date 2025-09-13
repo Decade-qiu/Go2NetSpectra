@@ -10,18 +10,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	// NATS connection details (hardcoded for now, should be moved to config)
-	natsURL   = nats.DefaultURL
-	natsSubject = "gons.packets.raw"
-)
-
 // StreamAggregator consumes packets from NATS and uses a model.Manager to aggregate them.
 type StreamAggregator struct {
 	nc           *nats.Conn
 	sub          *nats.Subscription
 	manager      *manager.Manager
 	inputChannel chan<- *v1.PacketInfo
+	natsURL   	string
+	natsSubject  string
 }
 
 // NewStreamAggregator creates a new real-time stream aggregator.
@@ -35,13 +31,15 @@ func NewStreamAggregator(cfg *config.Config) (*StreamAggregator, error) {
 	return &StreamAggregator{
 		manager:      mgr,
 		inputChannel: mgr.InputChannel(), // Get the channel from the manager
+		natsURL:      cfg.Probe.NATSURL,
+		natsSubject:  cfg.Probe.Subject,
 	}, nil
 }
 
 // Start connects to NATS, starts the underlying manager, and begins processing messages.
 func (sa *StreamAggregator) Start() {
-	log.Println("StreamAggregator starting...")
-	nc, err := nats.Connect(natsURL)
+	log.Println("StreamAggregator starting for nats: ", sa.natsURL)
+	nc, err := nats.Connect(sa.natsURL)
 	if err != nil {
 		log.Fatalf("StreamAggregator failed to connect to NATS: %v", err)
 	}
@@ -50,11 +48,11 @@ func (sa *StreamAggregator) Start() {
 	// The manager starts its own worker pool and snapshotter.
 	sa.manager.Start()
 
-	sa.sub, err = sa.nc.Subscribe(natsSubject, sa.handlePacket)
+	sa.sub, err = sa.nc.Subscribe(sa.natsSubject, sa.handlePacket)
 	if err != nil {
 		log.Fatalf("StreamAggregator failed to subscribe: %v", err)
 	}
-	log.Printf("StreamAggregator subscribed to '%s'", natsSubject)
+	log.Printf("StreamAggregator subscribed to '%s'", sa.natsSubject)
 }
 
 // Stop gracefully shuts down the aggregator.
