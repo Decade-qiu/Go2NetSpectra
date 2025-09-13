@@ -56,7 +56,7 @@ func main() {
 
 	// Start HTTP server
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    cfg.API.ListenAddr,
 		Handler: r,
 	}
 

@@ -1,15 +1,17 @@
+# API Server settings
+api:
+  # Address for the API server to listen on.
+  listen_addr: ":8080"
+
 # Configuration file for the network traffic aggregator system.
 aggregator:
-
   # Type of aggregator to use. Currently only "exact" is supported.
   type: "exact"
-
   # The overall measurement period. At the end of each period, all task data is reset.
   # This should be longer than or equal to the longest writer snapshot_interval.
   period: "720h"
 
   # Global settings for the aggregator engine
-
   # Number of worker goroutines to process incoming packets.
   num_workers: 16
   # Size of the channel buffer for incoming packets.

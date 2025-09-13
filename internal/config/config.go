@@ -68,10 +68,16 @@ type ProbeConfig struct {
 	Persistence PersistenceConfig `yaml:"persistence"`
 }
 
+// APIConfig holds the configuration for the API server.
+type APIConfig struct {
+	ListenAddr string `yaml:"listen_addr"`
+}
+
 // Config is the top-level configuration struct for the entire application.
 type Config struct {
 	Aggregator AggregatorConfig `yaml:"aggregator"`
 	Probe      ProbeConfig      `yaml:"probe"`
+	API        APIConfig        `yaml:"api"`
 }
 
 // LoadConfig reads the configuration from a YAML file and returns a Config struct.
