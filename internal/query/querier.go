@@ -5,6 +5,7 @@ import (
 	"Go2NetSpectra/internal/config"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 )
@@ -51,25 +52,47 @@ func connect(cfg config.ClickHouseConfig) (clickhouse.Conn, error) {
 	return conn, nil
 }
 
-// AggregateFlows executes a fixed query to get the total counts for each task.
+// AggregateFlows builds and executes a dynamic aggregation query.
 func (q *clickhouseQuerier) AggregateFlows(ctx context.Context, req *v1.AggregationRequest) (*v1.QueryTotalCountsResponse, error) {
-	query := `
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString(`
 		SELECT
 			TaskName,
 			SUM(LatestByteCount) AS TotalBytes,
-			SUM(LatestPacketCount) AS TotalPackets
+			SUM(LatestPacketCount) AS TotalPackets,
+			COUNT(*) AS FlowCount
 		FROM (
 			SELECT
 				TaskName,
 				argMax(ByteCount, Timestamp) AS LatestByteCount,
 				argMax(PacketCount, Timestamp) AS LatestPacketCount
 			FROM flow_metrics
+	`)
+
+	var whereClauses []string
+	args := []interface{}{}
+
+	if req.EndTime != nil {
+		whereClauses = append(whereClauses, "Timestamp <= ?")
+		args = append(args, req.EndTime.AsTime())
+	}
+	if req.TaskName != "" {
+		whereClauses = append(whereClauses, "TaskName = ?")
+		args = append(args, req.TaskName)
+	}
+	// ... add other filters similarly
+
+	if len(whereClauses) > 0 {
+		queryBuilder.WriteString(" WHERE " + strings.Join(whereClauses, " AND "))
+	}
+
+	queryBuilder.WriteString(`
 			GROUP BY TaskName, SrcIP, DstIP, SrcPort, DstPort, Protocol
 		)
 		GROUP BY TaskName
-	`
+	`)
 
-	rows, err := q.conn.Query(ctx, query)
+	rows, err := q.conn.Query(ctx, queryBuilder.String(), args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -78,7 +101,7 @@ func (q *clickhouseQuerier) AggregateFlows(ctx context.Context, req *v1.Aggregat
 	var summaries []*v1.TaskSummary
 	for rows.Next() {
 		var summary v1.TaskSummary
-		if err := rows.Scan(&summary.TaskName, &summary.TotalBytes, &summary.TotalPackets); err != nil {
+		if err := rows.Scan(&summary.TaskName, &summary.TotalBytes, &summary.TotalPackets, &summary.FlowCount); err != nil {
 			return nil, fmt.Errorf("failed to scan aggregation result: %w", err)
 		}
 		summaries = append(summaries, &summary)

@@ -7,13 +7,12 @@
 package v1
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -25,16 +24,15 @@ const (
 
 // AggregationRequest defines the request for an aggregation query.
 type AggregationRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	StartTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	TaskName  string                 `protobuf:"bytes,3,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	EndTime  *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	TaskName string                 `protobuf:"bytes,2,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
 	// Optional filters
-	SrcIp         string `protobuf:"bytes,4,opt,name=src_ip,json=srcIp,proto3" json:"src_ip,omitempty"`
-	DstIp         string `protobuf:"bytes,5,opt,name=dst_ip,json=dstIp,proto3" json:"dst_ip,omitempty"`
-	SrcPort       uint32 `protobuf:"varint,6,opt,name=src_port,json=srcPort,proto3" json:"src_port,omitempty"`
-	DstPort       uint32 `protobuf:"varint,7,opt,name=dst_port,json=dstPort,proto3" json:"dst_port,omitempty"`
-	Protocol      uint32 `protobuf:"varint,8,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	SrcIp         string `protobuf:"bytes,3,opt,name=src_ip,json=srcIp,proto3" json:"src_ip,omitempty"`
+	DstIp         string `protobuf:"bytes,4,opt,name=dst_ip,json=dstIp,proto3" json:"dst_ip,omitempty"`
+	SrcPort       uint32 `protobuf:"varint,5,opt,name=src_port,json=srcPort,proto3" json:"src_port,omitempty"`
+	DstPort       uint32 `protobuf:"varint,6,opt,name=dst_port,json=dstPort,proto3" json:"dst_port,omitempty"`
+	Protocol      uint32 `protobuf:"varint,7,opt,name=protocol,proto3" json:"protocol,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -67,13 +65,6 @@ func (x *AggregationRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use AggregationRequest.ProtoReflect.Descriptor instead.
 func (*AggregationRequest) Descriptor() ([]byte, []int) {
 	return file_v1_query_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *AggregationRequest) GetStartTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.StartTime
-	}
-	return nil
 }
 
 func (x *AggregationRequest) GetEndTime() *timestamppb.Timestamp {
@@ -131,6 +122,7 @@ type TaskSummary struct {
 	TaskName      string                 `protobuf:"bytes,1,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
 	TotalBytes    uint64                 `protobuf:"varint,2,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
 	TotalPackets  uint64                 `protobuf:"varint,3,opt,name=total_packets,json=totalPackets,proto3" json:"total_packets,omitempty"`
+	FlowCount     uint64                 `protobuf:"varint,4,opt,name=flow_count,json=flowCount,proto3" json:"flow_count,omitempty"` // Number of unique flows
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -186,6 +178,13 @@ func (x *TaskSummary) GetTotalPackets() uint64 {
 	return 0
 }
 
+func (x *TaskSummary) GetFlowCount() uint64 {
+	if x != nil {
+		return x.FlowCount
+	}
+	return 0
+}
+
 // QueryTotalCountsResponse contains a list of summaries for each task.
 type QueryTotalCountsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -235,22 +234,22 @@ var File_v1_query_proto protoreflect.FileDescriptor
 
 const file_v1_query_proto_rawDesc = "" +
 	"\n" +
-	"\x0ev1/query.proto\x12\x02v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa3\x02\n" +
-	"\x12AggregationRequest\x129\n" +
-	"\n" +
-	"start_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
-	"\bend_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x1b\n" +
-	"\ttask_name\x18\x03 \x01(\tR\btaskName\x12\x15\n" +
-	"\x06src_ip\x18\x04 \x01(\tR\x05srcIp\x12\x15\n" +
-	"\x06dst_ip\x18\x05 \x01(\tR\x05dstIp\x12\x19\n" +
-	"\bsrc_port\x18\x06 \x01(\rR\asrcPort\x12\x19\n" +
-	"\bdst_port\x18\a \x01(\rR\adstPort\x12\x1a\n" +
-	"\bprotocol\x18\b \x01(\rR\bprotocol\"p\n" +
+	"\x0ev1/query.proto\x12\x02v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe8\x01\n" +
+	"\x12AggregationRequest\x125\n" +
+	"\bend_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x1b\n" +
+	"\ttask_name\x18\x02 \x01(\tR\btaskName\x12\x15\n" +
+	"\x06src_ip\x18\x03 \x01(\tR\x05srcIp\x12\x15\n" +
+	"\x06dst_ip\x18\x04 \x01(\tR\x05dstIp\x12\x19\n" +
+	"\bsrc_port\x18\x05 \x01(\rR\asrcPort\x12\x19\n" +
+	"\bdst_port\x18\x06 \x01(\rR\adstPort\x12\x1a\n" +
+	"\bprotocol\x18\a \x01(\rR\bprotocol\"\x8f\x01\n" +
 	"\vTaskSummary\x12\x1b\n" +
 	"\ttask_name\x18\x01 \x01(\tR\btaskName\x12\x1f\n" +
 	"\vtotal_bytes\x18\x02 \x01(\x04R\n" +
 	"totalBytes\x12#\n" +
-	"\rtotal_packets\x18\x03 \x01(\x04R\ftotalPackets\"I\n" +
+	"\rtotal_packets\x18\x03 \x01(\x04R\ftotalPackets\x12\x1d\n" +
+	"\n" +
+	"flow_count\x18\x04 \x01(\x04R\tflowCount\"I\n" +
 	"\x18QueryTotalCountsResponse\x12-\n" +
 	"\tsummaries\x18\x01 \x03(\v2\x0f.v1.TaskSummaryR\tsummariesB\fZ\n" +
 	"api/gen/v1b\x06proto3"
@@ -275,14 +274,13 @@ var file_v1_query_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil),    // 3: google.protobuf.Timestamp
 }
 var file_v1_query_proto_depIdxs = []int32{
-	3, // 0: v1.AggregationRequest.start_time:type_name -> google.protobuf.Timestamp
-	3, // 1: v1.AggregationRequest.end_time:type_name -> google.protobuf.Timestamp
-	1, // 2: v1.QueryTotalCountsResponse.summaries:type_name -> v1.TaskSummary
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 0: v1.AggregationRequest.end_time:type_name -> google.protobuf.Timestamp
+	1, // 1: v1.QueryTotalCountsResponse.summaries:type_name -> v1.TaskSummary
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_v1_query_proto_init() }

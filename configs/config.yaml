@@ -20,12 +20,12 @@ aggregator:
     # All tasks within this block share this snapshot interval and writer list.
     writers:
       - type: "gob"
-        enabled: true
+        enabled: false
         snapshot_interval: "3600s"
         gob:
           root_path: "test/res"
       - type: "clickhouse"
-        enabled: false
+        enabled: true
         snapshot_interval: "30s"
         # ClickHouse connection settings
         # you can run a local ClickHouse server with:
