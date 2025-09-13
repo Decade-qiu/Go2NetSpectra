@@ -35,15 +35,22 @@ graph TD
         Task1 -- snapshot --> Storage
         Task2 -- snapshot --> Storage
         TaskN -- snapshot --> Storage
-        Storage[(Storage: Files, DBs, etc.)]
+        Storage[(Storage: Files, ClickHouse)]
+    end
+
+    subgraph "Query Plane"
+        API[ns-api] -- SQL --> Storage
+        User[User/Client] -- HTTP --> API
     end
 
     style NATS fill:#FFB6C1,stroke:#333,stroke-width:2px
     style Manager fill:#ADD8E6,stroke:#333,stroke-width:2px
+    style API fill:#90EE90,stroke:#333,stroke-width:2px
 ```
-- **`ns-probe`**: Captures live traffic and publishes it to NATS.
+- **`ns-probe`**: Captures live traffic and publishes it to NATS. Can also persist raw packets to local files (`.pcap`, `.log`, `.gob`). Can also persist raw packets to local files (`.pcap`, `.log`, `.gob`).
 - **`pcap-analyzer`**: Reads packets from `.pcap` files for offline analysis.
-- **`ns-engine`**: Subscribes to NATS and feeds real-time data into the core engine.
+- **`ns-engine`**: Subscribes to NATS and feeds real-time data into the core engine for aggregation.
+- **`ns-api`**: Provides a RESTful API to query aggregated data from ClickHouse.
 - **Engine Core**: A concurrent, pluggable engine (`Manager` + `Task` model) that performs the actual aggregation, shared by both real-time and offline modes.
 
 For a more detailed explanation of the architecture, see [`doc/technology.md`](doc/technology.md).
@@ -65,32 +72,56 @@ This guide covers the basic steps to get the project running. For more details, 
 Install the Go plugin and generate the code:
 ```sh
 go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
-protoc --proto_path=api/proto --go_out=. api/proto/v1/traffic.proto
+protoc --proto_path=api/proto --go_out=. api/proto/v1/*.proto
 ```
 
-### 3. Running the Real-time Pipeline
+### 3. Running the Full Pipeline (Probe, Engine, API)
 
-You will need three separate terminals.
+You will need multiple separate terminals.
 
-**Terminal 1: Start NATS Server**
+**Terminal 1: Start Dependencies (NATS & ClickHouse)**
 ```sh
-docker run --rm -p 4222:4222 -ti nats:latest
+# Start NATS
+docker run --rm -p 4222:4222 nats:latest
+
+# In another terminal, start ClickHouse (use a password)
+docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=123 --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
 ```
 
 **Terminal 2: Start the Engine**
+
+Ensure your `configs/config.yaml` has the `clickhouse` writer enabled with the correct port (`19000`) and password (`123`).
 ```sh
 go run ./cmd/ns-engine/main.go
 ```
 
-**Terminal 3: Start the Probe**
+**Terminal 3: Start the API Server**
+```sh
+go run ./cmd/ns-api/main.go
+```
+
+**Terminal 4: Start the Probe**
 
 (Replace `<interface_name>` with your network interface, e.g., `en0` or `eth0`)
 ```sh
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 ```
 
-### 4. Running Offline Analysis
+### 4. Querying the API
 
-```sh
-go run ./cmd/pcap-analyzer/main.go <path_to_pcap_file>
-```
+After letting the probe run for a minute, use the provided query script:
+
+*   **Get total counts for all tasks (via API)**:
+    ```sh
+    go run ./scripts/query/main.go -mode=api
+    ```
+
+*   **Get total counts for a specific task (via API)**:
+    ```sh
+    go run ./scripts/query/main.go -mode=api -task=per_src_ip
+    ```
+
+*   **Query ClickHouse directly (for verification)**:
+    ```sh
+    go run ./scripts/query/main.go -mode=direct
+    ```
