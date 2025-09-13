@@ -6,7 +6,8 @@ option go_package = "api/gen/v1";
 
 import "google/protobuf/timestamp.proto";
 
-// AggregationRequest defines the request for an aggregation query.
+// --- Aggregation Query ---
+
 message AggregationRequest {
   google.protobuf.Timestamp end_time = 1;
   string task_name = 2;
@@ -18,15 +19,29 @@ message AggregationRequest {
   uint32 protocol = 7;
 }
 
-// TaskSummary holds the aggregated metrics for a single task.
 message TaskSummary {
   string task_name = 1;
   uint64 total_bytes = 2;
   uint64 total_packets = 3;
-  uint64 flow_count = 4; // Number of unique flows
+  uint64 flow_count = 4;
 }
 
-// QueryTotalCountsResponse contains a list of summaries for each task.
 message QueryTotalCountsResponse {
   repeated TaskSummary summaries = 1;
+}
+
+
+// --- Flow Tracing Query ---
+
+message TraceFlowRequest {
+  string task_name = 1;
+  map<string, string> flow_keys = 2; // e.g., {"SrcIP": "192.168.1.104", "DstPort": "443"}
+  google.protobuf.Timestamp end_time = 3;
+}
+
+message FlowLifecycle {
+  google.protobuf.Timestamp first_seen = 1;
+  google.protobuf.Timestamp last_seen = 2;
+  uint64 total_packets = 3;
+  uint64 total_bytes = 4;
 }

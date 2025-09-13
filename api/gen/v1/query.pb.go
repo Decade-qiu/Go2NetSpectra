@@ -22,7 +22,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// AggregationRequest defines the request for an aggregation query.
 type AggregationRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	EndTime  *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
@@ -116,13 +115,12 @@ func (x *AggregationRequest) GetProtocol() uint32 {
 	return 0
 }
 
-// TaskSummary holds the aggregated metrics for a single task.
 type TaskSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TaskName      string                 `protobuf:"bytes,1,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
 	TotalBytes    uint64                 `protobuf:"varint,2,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
 	TotalPackets  uint64                 `protobuf:"varint,3,opt,name=total_packets,json=totalPackets,proto3" json:"total_packets,omitempty"`
-	FlowCount     uint64                 `protobuf:"varint,4,opt,name=flow_count,json=flowCount,proto3" json:"flow_count,omitempty"` // Number of unique flows
+	FlowCount     uint64                 `protobuf:"varint,4,opt,name=flow_count,json=flowCount,proto3" json:"flow_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -185,7 +183,6 @@ func (x *TaskSummary) GetFlowCount() uint64 {
 	return 0
 }
 
-// QueryTotalCountsResponse contains a list of summaries for each task.
 type QueryTotalCountsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Summaries     []*TaskSummary         `protobuf:"bytes,1,rep,name=summaries,proto3" json:"summaries,omitempty"`
@@ -230,6 +227,134 @@ func (x *QueryTotalCountsResponse) GetSummaries() []*TaskSummary {
 	return nil
 }
 
+type TraceFlowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskName      string                 `protobuf:"bytes,1,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
+	FlowKeys      map[string]string      `protobuf:"bytes,2,rep,name=flow_keys,json=flowKeys,proto3" json:"flow_keys,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // e.g., {"SrcIP": "192.168.1.104", "DstPort": "443"}
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TraceFlowRequest) Reset() {
+	*x = TraceFlowRequest{}
+	mi := &file_v1_query_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TraceFlowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TraceFlowRequest) ProtoMessage() {}
+
+func (x *TraceFlowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TraceFlowRequest.ProtoReflect.Descriptor instead.
+func (*TraceFlowRequest) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TraceFlowRequest) GetTaskName() string {
+	if x != nil {
+		return x.TaskName
+	}
+	return ""
+}
+
+func (x *TraceFlowRequest) GetFlowKeys() map[string]string {
+	if x != nil {
+		return x.FlowKeys
+	}
+	return nil
+}
+
+func (x *TraceFlowRequest) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+type FlowLifecycle struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FirstSeen     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=first_seen,json=firstSeen,proto3" json:"first_seen,omitempty"`
+	LastSeen      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	TotalPackets  uint64                 `protobuf:"varint,3,opt,name=total_packets,json=totalPackets,proto3" json:"total_packets,omitempty"`
+	TotalBytes    uint64                 `protobuf:"varint,4,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlowLifecycle) Reset() {
+	*x = FlowLifecycle{}
+	mi := &file_v1_query_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlowLifecycle) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlowLifecycle) ProtoMessage() {}
+
+func (x *FlowLifecycle) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlowLifecycle.ProtoReflect.Descriptor instead.
+func (*FlowLifecycle) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *FlowLifecycle) GetFirstSeen() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FirstSeen
+	}
+	return nil
+}
+
+func (x *FlowLifecycle) GetLastSeen() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeen
+	}
+	return nil
+}
+
+func (x *FlowLifecycle) GetTotalPackets() uint64 {
+	if x != nil {
+		return x.TotalPackets
+	}
+	return 0
+}
+
+func (x *FlowLifecycle) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
 var File_v1_query_proto protoreflect.FileDescriptor
 
 const file_v1_query_proto_rawDesc = "" +
@@ -251,7 +376,21 @@ const file_v1_query_proto_rawDesc = "" +
 	"\n" +
 	"flow_count\x18\x04 \x01(\x04R\tflowCount\"I\n" +
 	"\x18QueryTotalCountsResponse\x12-\n" +
-	"\tsummaries\x18\x01 \x03(\v2\x0f.v1.TaskSummaryR\tsummariesB\fZ\n" +
+	"\tsummaries\x18\x01 \x03(\v2\x0f.v1.TaskSummaryR\tsummaries\"\xe4\x01\n" +
+	"\x10TraceFlowRequest\x12\x1b\n" +
+	"\ttask_name\x18\x01 \x01(\tR\btaskName\x12?\n" +
+	"\tflow_keys\x18\x02 \x03(\v2\".v1.TraceFlowRequest.FlowKeysEntryR\bflowKeys\x125\n" +
+	"\bend_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x1a;\n" +
+	"\rFlowKeysEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc9\x01\n" +
+	"\rFlowLifecycle\x129\n" +
+	"\n" +
+	"first_seen\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tfirstSeen\x127\n" +
+	"\tlast_seen\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen\x12#\n" +
+	"\rtotal_packets\x18\x03 \x01(\x04R\ftotalPackets\x12\x1f\n" +
+	"\vtotal_bytes\x18\x04 \x01(\x04R\n" +
+	"totalBytesB\fZ\n" +
 	"api/gen/v1b\x06proto3"
 
 var (
@@ -266,21 +405,28 @@ func file_v1_query_proto_rawDescGZIP() []byte {
 	return file_v1_query_proto_rawDescData
 }
 
-var file_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_v1_query_proto_goTypes = []any{
 	(*AggregationRequest)(nil),       // 0: v1.AggregationRequest
 	(*TaskSummary)(nil),              // 1: v1.TaskSummary
 	(*QueryTotalCountsResponse)(nil), // 2: v1.QueryTotalCountsResponse
-	(*timestamppb.Timestamp)(nil),    // 3: google.protobuf.Timestamp
+	(*TraceFlowRequest)(nil),         // 3: v1.TraceFlowRequest
+	(*FlowLifecycle)(nil),            // 4: v1.FlowLifecycle
+	nil,                              // 5: v1.TraceFlowRequest.FlowKeysEntry
+	(*timestamppb.Timestamp)(nil),    // 6: google.protobuf.Timestamp
 }
 var file_v1_query_proto_depIdxs = []int32{
-	3, // 0: v1.AggregationRequest.end_time:type_name -> google.protobuf.Timestamp
+	6, // 0: v1.AggregationRequest.end_time:type_name -> google.protobuf.Timestamp
 	1, // 1: v1.QueryTotalCountsResponse.summaries:type_name -> v1.TaskSummary
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	5, // 2: v1.TraceFlowRequest.flow_keys:type_name -> v1.TraceFlowRequest.FlowKeysEntry
+	6, // 3: v1.TraceFlowRequest.end_time:type_name -> google.protobuf.Timestamp
+	6, // 4: v1.FlowLifecycle.first_seen:type_name -> google.protobuf.Timestamp
+	6, // 5: v1.FlowLifecycle.last_seen:type_name -> google.protobuf.Timestamp
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_v1_query_proto_init() }
@@ -294,7 +440,7 @@ func file_v1_query_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_query_proto_rawDesc), len(file_v1_query_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

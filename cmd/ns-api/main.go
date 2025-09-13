@@ -52,6 +52,7 @@ func main() {
 
 	// Define API routes
 	r.HandleFunc("/api/v1/aggregate", apiHandler.aggregateFlowsHandler).Methods("POST")
+	r.HandleFunc("/api/v1/flows/trace", apiHandler.traceFlowHandler).Methods("POST")
 
 	// Start HTTP server
 	server := &http.Server{
@@ -102,6 +103,36 @@ func (h *APIHandler) aggregateFlowsHandler(w http.ResponseWriter, r *http.Reques
 	resp, err := h.querier.AggregateFlows(r.Context(), &req)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to query flows: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	jsonBytes, err := protojson.Marshal(resp)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to marshal response: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes)
+}
+
+// traceFlowHandler handles tracing a single flow's lifecycle.
+func (h *APIHandler) traceFlowHandler(w http.ResponseWriter, r *http.Request) {
+	var req v1.TraceFlowRequest
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := protojson.Unmarshal(body, &req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	resp, err := h.querier.TraceFlow(r.Context(), &req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to trace flow: %v", err), http.StatusInternalServerError)
 		return
 	}
 
