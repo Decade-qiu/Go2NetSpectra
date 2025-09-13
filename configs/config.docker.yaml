@@ -1,0 +1,72 @@
+# API Server settings
+api:
+  # Address for the API server to listen on.
+  listen_addr: ":8080"
+
+# Configuration file for the network traffic aggregator system.
+aggregator:
+  # Type of aggregator to use. Currently only "exact" is supported.
+  type: "exact"
+  # The overall measurement period. At the end of each period, all task data is reset.
+  # This should be longer than or equal to the longest writer snapshot_interval.
+  period: "720h"
+
+  # Global settings for the aggregator engine
+  # Number of worker goroutines to process incoming packets.
+  num_workers: 16
+  # Size of the channel buffer for incoming packets.
+  size_of_packet_channel: 10000
+
+  # Configuration block for the "exact" aggregator type
+  exact:
+    # All tasks within this block share this snapshot interval and writer list.
+    writers:
+      - type: "gob"
+        enabled: false
+        snapshot_interval: "3600s"
+        gob:
+          root_path: "test/res"
+      - type: "clickhouse"
+        enabled: true
+        snapshot_interval: "30s"
+        # ClickHouse connection settings
+        clickhouse:
+          host: "clickhouse"
+          port: 9000
+          database: "default"
+          username: "default"
+          password: "123"
+    # List of specific aggregation tasks to run.
+    tasks:
+        - name: "per_src_ip"
+          key_fields: ["SrcIP"]
+          num_shards: 64
+        - name: "per_dst_ip"
+          key_fields: ["DstIP"]
+          num_shards: 64
+        - name: "per_src_port"
+          key_fields: ["SrcPort"]
+          num_shards: 32
+        - name: "per_dst_port"
+          key_fields: ["DstPort"]
+          num_shards: 32
+        - name: "per_protocol"
+          key_fields: ["Protocol"]
+          num_shards: 16
+        - name: "per_five_tuple"
+          key_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
+          num_shards: 128
+
+# Probe settings
+probe:
+  # NATS server URL for the probe to connect to.
+  nats_url: "nats://nats:4222"
+  # NATS subject to publish raw packet data to.
+  subject: "gons.packets.raw"
+  # Persistence settings for storing raw packets to disk.
+  persistence:
+    enabled: false
+    path: "test/publish" # File path for persisted packets
+    num_workers: 4             # Number of goroutines for writing
+    channel_buffer_size: 10000 # Size of the buffered channel for persistence
+    encoding: "pcap" # Encoding format: "text", "gob", or "pcap"
