@@ -241,10 +241,15 @@ sequenceDiagram
     User->>API: 启动API服务
     API->>ClickHouse: 连接数据库
 
-    User->>API: 发送聚合查询请求 (HTTP POST)
-    API->>ClickHouse: 执行 SQL 查询 (使用 argMax)
-    ClickHouse-->>API: 返回查询结果
-    API-->>User: 返回 JSON 响应
+    User->>API: 发送聚合查询请求 (HTTP POST /api/v1/aggregate)
+    API->>ClickHouse: 执行聚合 SQL 查询 (SUM, COUNT, argMax)
+    ClickHouse-->>API: 返回聚合结果
+    API-->>User: 返回 JSON 响应 (TaskSummary)
+
+    User->>API: 发送流追溯请求 (HTTP POST /api/v1/flows/trace)
+    API->>ClickHouse: 执行过滤 SQL 查询 (MIN, MAX, SUM)
+    ClickHouse-->>API: 返回生命周期结果
+    API-->>User: 返回 JSON 响应 (FlowLifecycle)
 ```
 
 ---
