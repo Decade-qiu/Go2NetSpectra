@@ -109,19 +109,15 @@ sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 
 ### 4. Querying the API
 
-After letting the probe run for a minute, use the provided query script:
+After letting the probe run for a minute, use the provided query script in `scripts/query/`.
 
-*   **Get total counts for all tasks (via API)**:
+*   **Get aggregated totals for a task**:
     ```sh
-    go run ./scripts/query/main.go -mode=api
+    go run ./scripts/query/main.go -mode=aggregate -task=per_src_ip
     ```
 
-*   **Get total counts for a specific task (via API)**:
+*   **Trace a specific flow's lifecycle**:
+    
     ```sh
-    go run ./scripts/query/main.go -mode=api -task=per_src_ip
-    ```
-
-*   **Query ClickHouse directly (for verification)**:
-    ```sh
-    go run ./scripts/query/main.go -mode=direct
+    go run ./scripts/query/main.go -mode=trace -task=per_five_tuple -key="SrcIP=1.2.3.4,DstPort=443"
     ```
