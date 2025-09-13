@@ -57,3 +57,12 @@ aggregator:
         - name: "per_five_tuple"
           key_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
           num_shards: 128
+
+# Probe settings
+probe:
+  # NATS server URL for the probe to connect to.
+  nats_url: "nats://localhost:4222"
+  # NATS subject to publish raw packet data to.
+  subject: "gons.packets.raw"
+  # Whether to use persistent NATS streaming (not yet implemented).
+  persistent: false

@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"Go2NetSpectra/internal/config"
 	"log"
 
 	v1 "Go2NetSpectra/api/gen/v1"
@@ -18,14 +19,13 @@ type Publisher struct {
 }
 
 // NewPublisher creates a new NATS publisher.
-// It connects to the NATS server at the given URL.
-func NewPublisher(natsURL, subject string) (*Publisher, error) {
-	nc, err := nats.Connect(natsURL)
+func NewPublisher(cfg config.ProbeConfig) (*Publisher, error) {
+	nc, err := nats.Connect(cfg.NATSURL)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Connected to NATS server at %s", natsURL)
-	return &Publisher{nc: nc, subject: subject}, nil
+	log.Printf("Connected to NATS server at %s", cfg.NATSURL)
+	return &Publisher{nc: nc, subject: cfg.Subject}, nil
 }
 
 // Publish serializes a PacketInfo to Protobuf and publishes it to the configured NATS subject.

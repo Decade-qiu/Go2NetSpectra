@@ -1,6 +1,7 @@
 package main
 
 import (
+	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/internal/probe"
 	"Go2NetSpectra/internal/protocol"
@@ -13,13 +14,6 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
-	"github.com/nats-io/nats.go"
-)
-
-const (
-	// NATS connection details (hardcoded for now, should be moved to config)
-	natsURL   = nats.DefaultURL // Assumes NATS server is running on localhost:4222
-	natsSubject = "gons.packets.raw"
 )
 
 const (
@@ -34,12 +28,18 @@ func main() {
 	iface := flag.String("iface", "", "Interface to capture packets from (required for pub mode).")
 	flag.Parse()
 
+	// Load configuration
+	cfg, err := config.LoadConfig("configs/config.yaml")
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
 	// --- Mode Dispatch ---
 	switch *mode {
 	case "pub":
-		runProbe(*iface)
+		runProbe(cfg.Probe, *iface)
 	case "sub":
-		runSubscriber()
+		runSubscriber(cfg.Probe)
 	default:
 		fmt.Fprintf(os.Stderr, "Invalid mode: %s\n", *mode)
 		flag.Usage()
@@ -48,7 +48,7 @@ func main() {
 }
 
 // runProbe contains the logic for capturing packets and publishing them to NATS.
-func runProbe(interfaceName string) {
+func runProbe(cfg config.ProbeConfig, interfaceName string) {
 	if interfaceName == "" {
 		log.Println("Error: -iface flag is required for probe mode.")
 		flag.Usage()
@@ -57,7 +57,7 @@ func runProbe(interfaceName string) {
 	log.Printf("Starting ns-probe in PROBE mode on interface: %s", interfaceName)
 
 	// Initialize NATS Publisher
-	pub, err := probe.NewPublisher(natsURL, natsSubject)
+	pub, err := probe.NewPublisher(cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect to NATS: %v", err)
 	}
@@ -96,16 +96,16 @@ func runProbe(interfaceName string) {
 	}()
 
 	// Wait for a shutdown signal
-	<-sigChan
+	<-	sigChan
 	log.Println("Shutdown signal received, cleaning up...")
 }
 
 // runSubscriber contains the logic for subscribing to NATS and printing messages.
-func runSubscriber() {
+func runSubscriber(cfg config.ProbeConfig) {
 	log.Println("Starting ns-probe in SUBSCRIBER mode...")
 
 	// Create a new subscriber
-	sub, err := probe.NewSubscriber(natsURL)
+	sub, err := probe.NewSubscriber(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create subscriber: %v", err)
 	}
@@ -117,7 +117,7 @@ func runSubscriber() {
 	}
 
 	// Start listening for messages
-	if err := sub.Start(natsSubject, handler); err != nil {
+	if err := sub.Start(handler); err != nil {
 		log.Fatalf("Subscriber failed to start: %v", err)
 	}
 
@@ -126,6 +126,6 @@ func runSubscriber() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Wait for a shutdown signal
-	<-sigChan
+	<-	sigChan
 	log.Println("Shutdown signal received, cleaning up...")
 }

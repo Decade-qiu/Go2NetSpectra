@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"Go2NetSpectra/internal/config"
 	"log"
 	"net"
 
@@ -16,23 +17,24 @@ type PacketHandler func(info model.PacketInfo)
 
 // Subscriber is responsible for subscribing to a NATS subject and processing messages.
 type Subscriber struct {
-	nc   *nats.Conn
-	sub  *nats.Subscription
+	nc      *nats.Conn
+	sub     *nats.Subscription
+	subject string
 }
 
 // NewSubscriber creates a new NATS subscriber.
-func NewSubscriber(natsURL string) (*Subscriber, error) {
-	nc, err := nats.Connect(natsURL)
+func NewSubscriber(cfg config.ProbeConfig) (*Subscriber, error) {
+	nc, err := nats.Connect(cfg.NATSURL)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Connected to NATS server at %s", natsURL)
-	return &Subscriber{nc: nc}, nil
+	log.Printf("Connected to NATS server at %s", cfg.NATSURL)
+	return &Subscriber{nc: nc, subject: cfg.Subject}, nil
 }
 
 // Start subscribes to the given subject and starts processing messages with the provided handler.
-func (s *Subscriber) Start(subject string, handler PacketHandler) error {
-	sub, err := s.nc.Subscribe(subject, func(msg *nats.Msg) {
+func (s *Subscriber) Start(handler PacketHandler) error {
+	sub, err := s.nc.Subscribe(s.subject, func(msg *nats.Msg) {
 		// Decode the protobuf message
 		var pbPacket v1.PacketInfo
 		if err := proto.Unmarshal(msg.Data, &pbPacket); err != nil {
@@ -58,7 +60,7 @@ func (s *Subscriber) Start(subject string, handler PacketHandler) error {
 		return err
 	}
 	s.sub = sub
-	log.Printf("Subscribed to '%s'. Waiting for messages...", subject)
+	log.Printf("Subscribed to '%s'. Waiting for messages...", s.subject)
 	return nil
 }
 

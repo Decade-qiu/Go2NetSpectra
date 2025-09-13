@@ -52,9 +52,17 @@ type AggregatorConfig struct {
 	Exact               ExactAggregatorConfig `yaml:"exact"`
 }
 
+// ProbeConfig holds the configuration for the probe component.
+type ProbeConfig struct {
+    NATSURL   string `yaml:"nats_url"`
+    Subject   string `yaml:"subject"`
+    Persistent bool   `yaml:"persistent"`
+}
+
 // Config is the top-level configuration struct for the entire application.
 type Config struct {
 	Aggregator AggregatorConfig `yaml:"aggregator"`
+	Probe      ProbeConfig      `yaml:"probe"`
 }
 
 // LoadConfig reads the configuration from a YAML file and returns a Config struct.
