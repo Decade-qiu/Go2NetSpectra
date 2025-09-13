@@ -28,7 +28,7 @@ type TraceFlowRequest struct {
 func main() {
 	// Define command-line flags
 	mode := flag.String("mode", "aggregate", "Query mode: 'aggregate' for totals, 'trace' for a single flow lifecycle.")
-	taskName := flag.String("task", "per_src_ip", "The name of the task to query.")
+	taskName := flag.String("task", "", "The name of the task to query.")
 	flowKey := flag.String("key", "SrcIP=127.0.0.1", "Flow key for trace mode (e.g., SrcIP=1.2.3.4,DstPort=443).")
 
 	defaultEnd := time.Now().UTC().Add(8 * time.Hour).Format(time.RFC3339)
