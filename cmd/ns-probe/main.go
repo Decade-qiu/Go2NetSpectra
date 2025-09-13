@@ -85,7 +85,7 @@ func runProbe(cfg config.ProbeConfig, interfaceName string) {
 			if err != nil {
 				continue // Skip non-IP packets
 			}
-			if err := pub.Publish(info); err != nil {
+			if err := pub.Publish(packet, info); err != nil {
 				log.Printf("Failed to publish packet: %v", err)
 			}
 			packetsPublished++
