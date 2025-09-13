@@ -167,3 +167,15 @@ go run ./scripts/gobana/main.go <path_to_dat_file>
 ```sh
 go run ./cmd/ns-probe/main.go --mode=sub
 ```
+
+### 6.3. 探针持久化
+
+`ns-probe` 支持将捕获到的数据包异步写入本地文件，以便后续分析或备份。此功能通过 `configs/config.yaml` 中的 `probe.persistence` 部分进行配置。
+
+- **`enabled`**: `true` 或 `false`，控制是否开启持久化。
+- **`path`**: 持久化文件存储的**目录**。
+- **`encoding`**: 存储格式，支持 `text`（人类可读的五元组信息）、`gob`（Go特定的二进制格式）和 `pcap`（标准网络抓包格式）。
+- **`num_workers`**: 用于写入文件的协程数量。
+- **`channel_buffer_size`**: 内存中用于缓冲数据包的通道大小。
+
+当 `enabled: true` 时，`ns-probe` 会在指定的 `path` 目录下创建一个以启动时间戳命名的文件（如 `2025-09-13_10-30-00.pcap`），并将数据写入其中。
