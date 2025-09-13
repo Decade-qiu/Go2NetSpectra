@@ -59,7 +59,7 @@ For a more detailed explanation of the architecture, see [`doc/technology.md`](d
 
 ## Getting Started
 
-This guide covers the basic steps to get the project running. For more details, please refer to [`doc/build.md`](doc/build.md).
+This guide covers the basic steps to get the project running. For more details on configuration files (`config.yaml` vs `config.docker.yaml`) and different running modes, please refer to [`doc/build.md`](doc/build.md).
 
 ### 1. Prerequisites
 
