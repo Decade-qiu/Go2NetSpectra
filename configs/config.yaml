@@ -20,12 +20,12 @@ aggregator:
     # All tasks within this block share this snapshot interval and writer list.
     writers:
       - type: "gob"
-        enabled: false
+        enabled: true
         snapshot_interval: "3600s"
         gob:
           root_path: "test/res"
       - type: "clickhouse"
-        enabled: true
+        enabled: false
         snapshot_interval: "30s"
         # ClickHouse connection settings
         # you can run a local ClickHouse server with:
@@ -64,5 +64,10 @@ probe:
   nats_url: "nats://localhost:4222"
   # NATS subject to publish raw packet data to.
   subject: "gons.packets.raw"
-  # Whether to use persistent NATS streaming (not yet implemented).
-  persistent: false
+  # Persistence settings for storing raw packets to disk.
+  persistence:
+    enabled: false
+    path: "test/publish" # File path for persisted packets
+    num_workers: 4             # Number of goroutines for writing
+    channel_buffer_size: 10000 # Size of the buffered channel for persistence
+    encoding: "pcap" # Encoding format: "text", "gob", or "pcap"

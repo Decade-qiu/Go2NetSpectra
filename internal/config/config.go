@@ -52,11 +52,20 @@ type AggregatorConfig struct {
 	Exact               ExactAggregatorConfig `yaml:"exact"`
 }
 
+// PersistenceConfig holds the configuration for the probe's local persistence worker.
+type PersistenceConfig struct {
+	Enabled           bool   `yaml:"enabled"`
+	Path              string `yaml:"path"`
+	NumWorkers        int    `yaml:"num_workers"`
+	Encoding          string `yaml:"encoding"` // "text" or "gob"
+	ChannelBufferSize int    `yaml:"channel_buffer_size"`
+}
+
 // ProbeConfig holds the configuration for the probe component.
 type ProbeConfig struct {
-    NATSURL   string `yaml:"nats_url"`
-    Subject   string `yaml:"subject"`
-    Persistent bool   `yaml:"persistent"`
+	NATSURL     string            `yaml:"nats_url"`
+	Subject     string            `yaml:"subject"`
+	Persistence PersistenceConfig `yaml:"persistence"`
 }
 
 // Config is the top-level configuration struct for the entire application.
