@@ -120,8 +120,8 @@ func (q *clickhouseQuerier) TraceFlow(ctx context.Context, req *v1.TraceFlowRequ
 		SELECT
 			min(StartTime) AS FirstSeen,
 			max(EndTime) AS LastSeen,
-			SUM(PacketCount) AS TotalPackets,
-			SUM(ByteCount) AS TotalBytes
+			max(PacketCount) AS TotalPackets,
+			max(ByteCount) AS TotalBytes
 		FROM flow_metrics
 	`)
 
