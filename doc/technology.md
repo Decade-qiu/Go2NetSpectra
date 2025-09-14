@@ -218,7 +218,7 @@ sequenceDiagram
 
 ### 3.2. 实时监控与查询
 
-这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理并写入 ClickHouse，`ns-api` 提供查询服务。
+这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理并写入 ClickHouse，`ns-api` 提供查询服务，最终由 Grafana 进行展示。
 
 ```mermaid
 sequenceDiagram
@@ -228,6 +228,7 @@ sequenceDiagram
     participant Engine as ns-engine
     participant ClickHouse as ClickHouse数据库
     participant API as ns-api
+    participant Grafana as Grafana
 
     User->>Probe: 启动探针
     Probe->>NATS: Publish(PacketInfo)
@@ -241,15 +242,14 @@ sequenceDiagram
     User->>API: 启动API服务
     API->>ClickHouse: 连接数据库
 
-    User->>API: 发送聚合查询请求 (HTTP POST /api/v1/aggregate)
-    API->>ClickHouse: 执行聚合 SQL 查询 (SUM, COUNT, argMax)
-    ClickHouse-->>API: 返回聚合结果
-    API-->>User: 返回 JSON 响应 (TaskSummary)
-
-    User->>API: 发送流追溯请求 (HTTP POST /api/v1/flows/trace)
-    API->>ClickHouse: 执行过滤 SQL 查询 (MIN, MAX, SUM)
-    ClickHouse-->>API: 返回生命周期结果
-    API-->>User: 返回 JSON 响应 (FlowLifecycle)
+    User->>Grafana: 访问仪表盘
+    Grafana->>API: 调用 /search 获取指标
+    API-->>Grafana: 返回 Task 列表
+    Grafana->>API: 调用 /query 查询数据
+    API->>ClickHouse: 执行 SQL 查询
+    ClickHouse-->>API: 返回查询结果
+    API-->>Grafana: 返回时间序列数据
+    Grafana-->>User: 渲染图表
 ```
 
 ---

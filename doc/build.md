@@ -94,17 +94,21 @@ docker compose up --build
 
 此命令会一并启动 `nats`, `clickhouse`, `ns-engine`, 和 `ns-api` 四个服务，并处理好它们之间的启动依赖顺序。
 
-### 4.3. 发送数据与查询
+### 4.3. 验证与查询
 
-在 `docker compose` 运行后，您仍然需要在**主机**上运行 `ns-probe` 来向容器化的 NATS 发送数据，或者使用查询脚本。
+在 `docker compose` 运行后，您可以通过以下方式与系统交互：
 
-```sh
-# 在一个新终端中，启动探针
-sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
+*   **访问 Grafana**: 在浏览器中打开 `http://localhost:3000` (默认用户名/密码: `admin`/`admin`)。您应该能看到一个名为 `Go2NetSpectra Overview` 的预置仪表盘，并能从中看到实时数据。
 
-# 在另一个新终端中，使用查询脚本
-go run ./scripts/query/main.go -mode=api
-```
+*   **运行探针**: 在一个新终端中，运行 `ns-probe` 向容器化的 NATS 发送数据。
+    ```sh
+    sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
+    ```
+
+*   **使用查询脚本**: 在另一个新终端中，使用脚本与 `ns-api` 交互。
+    ```sh
+    go run ./scripts/query/main.go -mode=aggregate
+    ```
 
 ---
 
