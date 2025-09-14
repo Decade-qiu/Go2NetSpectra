@@ -5,6 +5,7 @@ import (
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/query"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -16,7 +17,24 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// Grafana-specific structs
+type QueryRequest struct {
+	Targets []struct {
+		Target string `json:"target"`
+	} `json:"targets"`
+	Range struct {
+		From time.Time `json:"from"`
+		To   time.Time `json:"to"`
+	} `json:"range"`
+}
+
+type TimeSeriesResponse struct {
+	Target     string      `json:"target"`
+	Datapoints [][]float64 `json:"datapoints"` // [ [value, timestamp_ms], ... ]
+}
 
 func main() {
 	// Load configuration
@@ -25,7 +43,6 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Find the first enabled ClickHouse writer config
 	var chCfg *config.ClickHouseConfig
 	for _, writerDef := range cfg.Aggregator.Exact.Writers {
 		if writerDef.Enabled && writerDef.Type == "clickhouse" {
@@ -38,23 +55,20 @@ func main() {
 		log.Fatalf("No enabled ClickHouse writer found in config. API server cannot start.")
 	}
 
-	// Initialize querier with the found config
 	querier, err := query.NewClickHouseQuerier(*chCfg)
 	if err != nil {
 		log.Fatalf("Failed to create querier: %v", err)
 	}
 
-	// Initialize router
 	r := mux.NewRouter()
+	apiHandler := &APIHandler{querier: querier, cfg: cfg}
 
-	// Create API handler with querier dependency
-	apiHandler := &APIHandler{querier: querier}
-
-	// Define API routes
+	r.HandleFunc("/", apiHandler.healthCheckHandler).Methods("GET")
+	r.HandleFunc("/search", apiHandler.searchHandler).Methods("POST")
+	r.HandleFunc("/query", apiHandler.queryHandler).Methods("POST")
 	r.HandleFunc("/api/v1/aggregate", apiHandler.aggregateFlowsHandler).Methods("POST")
 	r.HandleFunc("/api/v1/flows/trace", apiHandler.traceFlowHandler).Methods("POST")
 
-	// Start HTTP server
 	server := &http.Server{
 		Addr:    cfg.API.ListenAddr,
 		Handler: r,
@@ -85,9 +99,70 @@ func main() {
 // APIHandler holds the dependencies for API handlers.
 type APIHandler struct {
 	querier query.Querier
+	cfg     *config.Config
 }
 
-// aggregateFlowsHandler handles aggregation queries.
+func (h *APIHandler) healthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *APIHandler) searchHandler(w http.ResponseWriter, r *http.Request) {
+	var taskNames []string
+	for _, task := range h.cfg.Aggregator.Exact.Tasks {
+		taskNames = append(taskNames, task.Name)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(taskNames)
+}
+
+func (h *APIHandler) queryHandler(w http.ResponseWriter, r *http.Request) {
+	var req QueryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	startTime := req.Range.From
+	if startTime.IsZero() {
+		startTime = time.Unix(0, 0) // Default to epoch start time if not provided
+	}
+	endTime := req.Range.To
+	if endTime.IsZero() {
+		endTime = time.Now().Add(24 * time.Hour) // Default to 24 hours from now if not provided
+	}
+
+	var response []TimeSeriesResponse
+
+	for _, target := range req.Targets {
+		aggReq := &v1.AggregationRequest{
+			EndTime:   timestamppb.New(endTime),
+			TaskName:  target.Target,
+		}
+
+		aggResp, err := h.querier.AggregateFlows(r.Context(), aggReq)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var totalPackets float64
+		if len(aggResp.Summaries) > 0 {
+			totalPackets = float64(aggResp.Summaries[0].TotalPackets)
+		}
+
+		ts := TimeSeriesResponse{
+			Target: target.Target,
+			Datapoints: [][]float64{
+				{totalPackets, float64(endTime.Unix() * 1000)},
+			},
+		}
+		response = append(response, ts)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (h *APIHandler) aggregateFlowsHandler(w http.ResponseWriter, r *http.Request) {
 	var req v1.AggregationRequest
 	body, err := io.ReadAll(r.Body)
@@ -117,7 +192,6 @@ func (h *APIHandler) aggregateFlowsHandler(w http.ResponseWriter, r *http.Reques
 	w.Write(jsonBytes)
 }
 
-// traceFlowHandler handles tracing a single flow's lifecycle.
 func (h *APIHandler) traceFlowHandler(w http.ResponseWriter, r *http.Request) {
 	var req v1.TraceFlowRequest
 	body, err := io.ReadAll(r.Body)
