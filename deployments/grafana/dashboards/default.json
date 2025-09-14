@@ -1,0 +1,29 @@
+{
+  "dashboard": {
+    "id": 1,
+    "title": "Go2NetSpectra Overview",
+    "timezone": "browser",
+    "panels": [
+      {
+        "datasource": {
+          "type": "grafana-json-api-datasource",
+          "name": "Go2NetSpectra"
+        },
+        "id": 2,
+        "title": "Total Packets per Task",
+        "type": "timeseries",
+        "targets": [
+          {
+            "target": "per_src_ip"
+          },
+          {
+            "target": "per_dst_ip"
+          },
+          {
+            "target": "per_five_tuple"
+          }
+        ]
+      }
+    ]
+  }
+}

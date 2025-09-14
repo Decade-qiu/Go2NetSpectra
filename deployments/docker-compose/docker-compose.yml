@@ -33,7 +33,6 @@ services:
     build:
       context: ../../
       dockerfile: deployments/docker/ns-engine/Dockerfile
-
     depends_on:
       nats-box:
         condition: service_completed_successfully
@@ -46,7 +45,18 @@ services:
       dockerfile: deployments/docker/ns-api/Dockerfile
     ports:
       - "8080:8080"
-
     depends_on:
       clickhouse:
         condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_INSTALL_PLUGINS=marcusolsson-json-datasource
+    volumes:
+      - ../grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+      - ../grafana/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - ns-api
