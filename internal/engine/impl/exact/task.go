@@ -189,6 +189,12 @@ func (t *Task) Reset() {
 	wait.Wait() // Wait until all shards are reset
 }
 
+// Empty
+// Just to satisfy the interface
+func (t *Task) Query(flow []byte) uint32 {
+	return 0
+}
+
 // getShard returns the appropriate shard for a given key.
 func (t *Task) getShard(key string) *statistic.Shard {
 	hasher := fnv.New32a()

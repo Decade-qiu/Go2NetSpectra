@@ -1,0 +1,157 @@
+package sketch
+
+import (
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
+	"Go2NetSpectra/internal/factory"
+	"Go2NetSpectra/internal/model"
+	"log"
+)
+
+// --- Factory Registration ---
+
+func init() {
+	factory.RegisterAggregator("sketch", func(cfg *config.Config) ([]model.Task, []model.Writer, error) {
+		exactCfg := cfg.Aggregator.Sketch
+
+		// Create all enabled writers for this aggregator group
+		// No writers implemented yet
+		writers := make([]model.Writer, 0)
+
+		// Create all tasks for this aggregator group
+		tasks := make([]model.Task, len(exactCfg.Tasks))
+		for i, taskCfg := range exactCfg.Tasks {
+			tasks[i] = New(taskCfg.Name, taskCfg.FlowFields, taskCfg.ElementFields, taskCfg.Width, taskCfg.Depth, taskCfg.TopK)
+		}
+
+		return tasks, writers, nil
+	})
+}
+
+// --- Task Implementation ---
+
+const (
+	IPv4ByteSize = 4
+	IPv6ByteSize = 16
+	PortByteSize = 2
+	ProtoByteSize = 1
+)
+
+type Task struct {
+	name string
+	// flow key fields
+	flowFields []string
+	// the byte size of flow key
+	flowSize int
+	// element key fields
+	elementFields []string
+	// the byte size of element key
+	elemSize int
+	// data
+	sketch   statistic.Sketch
+}
+
+// New creates a new Sketch task with the given name, flow fields, and element fields.
+func New(name string, flowFields, elementFields []string, w, d, k uint32) model.Task {
+	flowSize := 0
+	for _, f := range flowFields {
+		flowSize += fieldByteSize(f)
+	}
+	elemSize := 0
+	for _, f := range elementFields {
+		elemSize += fieldByteSize(f)
+	}
+
+	log.Printf("Creating Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d)",
+		name, flowFields, flowSize, elementFields, elemSize)
+
+	return &Task{
+		name:          name,
+		flowFields:    flowFields,
+		elementFields: elementFields,
+		flowSize:      flowSize,
+		elemSize:      elemSize,
+		sketch:        statistic.NewCountMin(w, d, k),
+	}
+}
+
+// Name returns the name of the task.
+func (t *Task) Name() string {
+	return t.name
+}
+
+// ProcessPacket processes a single packet, creating or updating a flow in the correct shard.
+func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
+	flow, elem, err := t.generateFlowAndElem(packetInfo.FiveTuple)
+	if err != nil {
+		log.Printf("Error generating key for task '%s': %v\n", t.name, err)
+		return
+	}
+
+	t.sketch.Insert(flow, elem)
+}
+
+func (t *Task) Query(flow []byte) uint32 {
+	return t.sketch.Query(flow)
+}
+
+func (t *Task) Snapshot() interface{} {
+	return t.sketch.Topk()
+}
+
+// Reset clears the internal state of the task, preparing for a new measurement period.
+func (t *Task) Reset() {
+}
+
+// generateFlowAndElem creates Flow and Element keys based on the configured fields.
+func (t *Task) generateFlowAndElem(ft model.FiveTuple) ([]byte, []byte, error) {
+	flow := make([]byte, t.flowSize)
+	elem := make([]byte, t.elemSize)
+
+	writeBytes := func(buf []byte, offset int, field string) int {
+		switch field {
+		case "SrcIP":
+			copy(buf[offset:], ft.SrcIP.To16())
+			offset += IPv6ByteSize
+		case "DstIP":
+			copy(buf[offset:], ft.DstIP.To16())
+			offset += IPv6ByteSize
+		case "SrcPort":
+			buf[offset] = byte(ft.SrcPort >> 8)
+			buf[offset+1] = byte(ft.SrcPort & 0xFF)
+			offset += PortByteSize
+		case "DstPort":
+			buf[offset] = byte(ft.DstPort >> 8)
+			buf[offset+1] = byte(ft.DstPort & 0xFF)
+			offset += PortByteSize
+		case "Protocol":
+			buf[offset] = byte(ft.Protocol)
+			offset += ProtoByteSize
+		}
+		return offset
+	}
+
+	offset := 0
+	for _, f := range t.flowFields {
+		offset = writeBytes(flow, offset, f)
+	}
+	offset = 0
+	for _, f := range t.elementFields {
+		offset = writeBytes(elem, offset, f)
+	}
+
+	return flow, elem, nil
+}
+
+func fieldByteSize(field string) int {
+	switch field {
+	case "SrcIP", "DstIP":
+		return IPv6ByteSize
+	case "SrcPort", "DstPort":
+		return PortByteSize
+	case "Protocol":
+		return ProtoByteSize
+	default:
+		return 0
+	}
+}

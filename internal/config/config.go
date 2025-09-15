@@ -43,6 +43,21 @@ type ExactAggregatorConfig struct {
 	Tasks   []ExactTaskDef `yaml:"tasks"`
 }
 
+// SketchTaskDef defines a single task's parameters within the sketch aggregator group.
+type SketchTaskDef struct {
+	Name      string   `yaml:"name"`
+	FlowFields []string `yaml:"flow_fields"`
+	ElementFields []string `yaml:"element_fields"`
+	Width    uint32   `yaml:"width"`
+	Depth    uint32   `yaml:"depth"`
+	TopK     uint32   `yaml:"top_k"`
+}
+
+// SketchTaskDef defines a single task's parameters within the sketch aggregator group.
+type SketchAggregatorConfig struct {
+	Tasks   []SketchTaskDef `yaml:"tasks"`
+}
+
 // AggregatorConfig holds the top-level aggregator settings.
 type AggregatorConfig struct {
 	Type                string                `yaml:"type"`
@@ -50,6 +65,7 @@ type AggregatorConfig struct {
 	NumWorkers          int                   `yaml:"num_workers"`
 	SizeOfPacketChannel int                   `yaml:"size_of_packet_channel"`
 	Exact               ExactAggregatorConfig `yaml:"exact"`
+	Sketch              SketchAggregatorConfig`yaml:"sketch"`
 }
 
 // PersistenceConfig holds the configuration for the probe's local persistence worker.
