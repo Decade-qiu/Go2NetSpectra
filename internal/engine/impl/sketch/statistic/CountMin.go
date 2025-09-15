@@ -1,51 +1,37 @@
 package statistic
 
 import (
-	"container/heap"
+	"bytes"
 	"math/rand/v2"
+	"slices"
 )
 
 const (
-	defaultWidth = 1 << 20
-	defaultDepth = 3
-	defaultTopK  = 512
+	defaultWidth      = 1 << 20
+	defaultDepth      = 3
+	defaultThereshold = 512
 )
 
-// MinHeap implements a min-heap for HeavyRecord
-type MinHeap []HeavyRecord
-
-func (h MinHeap) Len() int           { return len(h) }
-func (h MinHeap) Less(i, j int) bool { return h[i].Count < h[j].Count } // Min-Heap
-func (h MinHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-
-func (h *MinHeap) Push(x any) {
-	*h = append(*h, x.(HeavyRecord))
-}
-
-func (h *MinHeap) Pop() any {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[0 : n-1]
-	return x
+type Bucket struct {
+	FP []byte
+	C  uint32
 }
 
 type CountMin struct {
-	w, d, k uint32
-	seed    []uint32
-	table   [][]uint32
-	hh      MinHeap
+	w, d, thereshold uint32
+	seed             []uint32
+	table            [][]Bucket
 }
 
-func NewCountMin(width, depth, topk uint32) *CountMin {
+func NewCountMin(width, depth, thereshold uint32, FS uint32) *CountMin {
 	if width == 0 {
 		width = defaultWidth
 	}
 	if depth == 0 {
 		depth = defaultDepth
 	}
-	if topk == 0 {
-		topk = defaultTopK
+	if thereshold == 0 {
+		thereshold = defaultThereshold
 	}
 
 	seed := make([]uint32, depth)
@@ -53,69 +39,88 @@ func NewCountMin(width, depth, topk uint32) *CountMin {
 		seed[i] = rand.Uint32()
 	}
 
-	table := make([][]uint32, depth)
+	table := make([][]Bucket, depth)
 	for i := range table {
-		table[i] = make([]uint32, width)
+		table[i] = make([]Bucket, width)
+		for j := range table[i] {
+			table[i][j] = Bucket{
+				FP: make([]byte, FS),
+				C:  0,
+			}
+		}
 	}
 
-	h := make(MinHeap, 0, topk)
-	heap.Init(&h)
-
 	return &CountMin{
-		w:      width,
-		d:      depth,
-		k:      topk,
-		seed:   seed,
-		table:  table,
-		hh:     h,
+		w:          width,
+		d:          depth,
+		thereshold: thereshold,
+		seed:       seed,
+		table:      table,
 	}
 }
 
 func (t *CountMin) Insert(flow, elem []byte) {
-	val := uint32(0xFFFFFFFF)
 	for i := 0; i < int(t.d); i++ {
 		index := MurmurHash3(flow, t.seed[i]) % t.w
-		t.table[i][index] += 1
-		if t.table[i][index] < val {
-			val = t.table[i][index]
+		if t.table[i][index].C == 0 {
+			copy(t.table[i][index].FP, flow)
+			t.table[i][index].C = 1
+		} else {
+			if bytes.Equal(t.table[i][index].FP, flow) {
+				t.table[i][index].C++
+			} else {
+				t.table[i][index].C--
+				if t.table[i][index].C == 0 {
+					copy(t.table[i][index].FP, flow)
+					t.table[i][index].C = 1
+				}
+			}
 		}
 	}
 
-	// Maintain the top-k heap
-	if contains(t.hh, flow) {
-		return
-	}
-	if len(t.hh) < int(t.k) {
-		heap.Push(&t.hh, HeavyRecord{Flow: flow, Count: val})
-	} else if val > t.hh[0].Count {
-		// Replace the minimum element
-		t.hh[0] = HeavyRecord{Flow: flow, Count: val}
-		heap.Fix(&t.hh, 0)
-	}
-}
-
-func contains(hh MinHeap, flow []byte) bool {
-	for _, record := range hh {
-		if string(record.Flow) == string(flow) {
-			return true
-		}
-	}
-	return false
 }
 
 // Implementation of Count-Min Sketch query
 func (t *CountMin) Query(flow []byte) uint32 {
-	min := uint32(0xFFFFFFFF)
+	sz := uint32(0)
 	for i := 0; i < int(t.d); i++ {
 		index := MurmurHash3(flow, t.seed[i]) % t.w
-		if t.table[i][index] < min {
-			min = t.table[i][index]
+		if bytes.Equal(t.table[i][index].FP, flow) {
+			sz = max(sz, t.table[i][index].C)
 		}
 	}
-	return min
+	return sz
 }
 
 // Implementation of retrieving top-k elements
-func (t *CountMin) Topk() []HeavyRecord {
-	return t.hh
+func (t *CountMin) HeavyHitters() []HeavyRecord {
+	hh := make(map[string]uint32)
+	for i := 0; i < int(t.d); i++ {
+		for j := 0; j < int(t.w); j++ {
+			bucket := t.table[i][j]
+			if bucket.C > 0 {
+				key := string(bucket.FP)
+				if count, exists := hh[key]; exists {
+					hh[key] = max(count, bucket.C)
+				} else {
+					hh[key] = bucket.C
+				}
+			}
+		}
+	}
+	heavyHitters := make([]HeavyRecord, 0)
+	for k, v := range hh {
+		if v < t.thereshold {
+			continue
+		}
+		heavyHitters = append(heavyHitters, HeavyRecord{
+			Flow:  []byte(k),
+			Count: v,
+		})
+	}
+	// Sort heavy hitters by count in descending order
+	slices.SortFunc(heavyHitters, func(a, b HeavyRecord) int {
+		return int(b.Count) - int(a.Count)
+	})
+	return heavyHitters
 }
