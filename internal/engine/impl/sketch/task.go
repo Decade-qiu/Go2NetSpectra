@@ -42,28 +42,28 @@ type Task struct {
 	// flow key fields
 	flowFields []string
 	// the byte size of flow key
-	flowSize int
+	flowSize uint32
 	// element key fields
 	elementFields []string
 	// the byte size of element key
-	elemSize int
+	elemSize uint32
 	// data
 	sketch   statistic.Sketch
 }
 
 // New creates a new Sketch task with the given name, flow fields, and element fields.
-func New(name string, flowFields, elementFields []string, w, d, k uint32) model.Task {
-	flowSize := 0
+func New(name string, flowFields, elementFields []string, w, d, thereshold uint32) model.Task {
+	flowSize := uint32(0)
 	for _, f := range flowFields {
 		flowSize += fieldByteSize(f)
 	}
-	elemSize := 0
+	elemSize := uint32(0)
 	for _, f := range elementFields {
 		elemSize += fieldByteSize(f)
 	}
 
-	log.Printf("Creating Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d)",
-		name, flowFields, flowSize, elementFields, elemSize)
+	log.Printf("Creating Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d) with width %d, depth %d, thereshold %d\n",
+		name, flowFields, flowSize, elementFields, elemSize, w, d, thereshold)
 
 	return &Task{
 		name:          name,
@@ -71,7 +71,7 @@ func New(name string, flowFields, elementFields []string, w, d, k uint32) model.
 		elementFields: elementFields,
 		flowSize:      flowSize,
 		elemSize:      elemSize,
-		sketch:        statistic.NewCountMin(w, d, k),
+		sketch:        statistic.NewCountMin(w, d, thereshold, flowSize),
 	}
 }
 
@@ -96,7 +96,7 @@ func (t *Task) Query(flow []byte) uint32 {
 }
 
 func (t *Task) Snapshot() interface{} {
-	return t.sketch.Topk()
+	return t.sketch.HeavyHitters()
 }
 
 // Reset clears the internal state of the task, preparing for a new measurement period.
@@ -143,7 +143,7 @@ func (t *Task) generateFlowAndElem(ft model.FiveTuple) ([]byte, []byte, error) {
 	return flow, elem, nil
 }
 
-func fieldByteSize(field string) int {
+func fieldByteSize(field string) uint32 {
 	switch field {
 	case "SrcIP", "DstIP":
 		return IPv6ByteSize

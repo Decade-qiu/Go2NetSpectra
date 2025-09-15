@@ -5,7 +5,7 @@ package statistic
 type Sketch interface {
 	Insert(flow, elem []byte)
 	Query(flow []byte) uint32
-	Topk() []HeavyRecord
+	HeavyHitters() []HeavyRecord
 }
 
 type HeavyRecord struct {
