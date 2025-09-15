@@ -7,4 +7,5 @@ type Task interface {
 	Snapshot() interface{}
 	Reset()
 	Name() string
+	Query(flow []byte) uint32
 }
