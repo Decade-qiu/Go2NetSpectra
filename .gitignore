@@ -21,3 +21,4 @@ vendor/
 test/
 GEMINI.md
 *.txt
+*.ipynb
