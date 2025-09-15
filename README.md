@@ -60,7 +60,7 @@ graph TD
 - **`ns-api`**: A RESTful API server that provides query capabilities over the aggregated data stored in ClickHouse, offering endpoints for both high-level summaries and detailed flow tracing.
 - **Engine Core**: The shared brain of the system, featuring a `Manager` that schedules and a set of `Task` plugins that execute the actual aggregation logic.
 
-For a more detailed explanation of the architecture, see [`doc/technology.md`](doc/technology.md).
+For a more detailed explanation of the architecture, configuration files (`config.yaml` vs `config.docker.yaml`), and how to run validation tests, see [`doc/technology.md`](doc/technology.md) and [`doc/build.md`](doc/build.md).
 
 ---
 

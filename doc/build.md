@@ -112,7 +112,18 @@ docker compose up --build
 
 ---
 
-## 5. 辅助工具
+## 6. 算法验证测试
+
+项目包含对 `sketch` 等估计算法的单元测试，用于验证其准确性。
+
+**运行 Count-Min Sketch 测试**:
+```sh
+go test -v ./internal/engine/impl/sketch/
+```
+
+---
+
+## 7. 辅助工具
 
 ### 5.1. 查询脚本
 
