@@ -20,3 +20,4 @@ vendor/
 # All test files
 test/
 GEMINI.md
+*.txt
