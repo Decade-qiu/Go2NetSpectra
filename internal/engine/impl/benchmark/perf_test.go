@@ -44,8 +44,65 @@ func BenchmarkAggregator(b *testing.B) {
 		packets = append(packets, info)
 	}
 
-	run_sketch(b)
-	run_exact(b)
+	b.Run("Sketch_Parallel", run_sketch_parallel)
+	b.Run("Exact_Parallel", run_exact_parallel)
+
+	// run_sketch(b)
+	// run_exact(b)
+}
+
+func run_sketch_parallel(b *testing.B) {
+	Counthreshold := uint32(4096)
+	Sizethreshold := uint32(4096 * 1024)
+	task := sketch.New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<8, 2, Sizethreshold, Counthreshold)
+
+	b.Run("Insert_Sketch_Parallel", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, pkt := range packets {
+					task.ProcessPacket(pkt)
+				}
+			}
+		})
+	})
+
+	b.Run("Query_Sketch_Parallel", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, pkt := range packets {
+					task.Query(pkt.FiveTuple.SrcIP.To16())
+				}
+			}
+		})
+	})
+}
+
+func run_exact_parallel(b *testing.B) {
+	task := exact.New("exact_per_src", []string{"SrcIP"}, 64)
+
+	b.Run("Insert_Exact_Parallel", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, pkt := range packets {
+					task.ProcessPacket(pkt)
+				}
+			}
+		})
+	})
+
+	b.Run("Query_Exact_Parallel", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, pkt := range packets {
+					task.Query(pkt.FiveTuple.SrcIP.To16())
+				}
+			}
+		})
+	})
 }
 
 func run_sketch(b *testing.B) {

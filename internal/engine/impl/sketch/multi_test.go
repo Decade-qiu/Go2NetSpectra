@@ -32,14 +32,14 @@ func TestMultiProcess(t *testing.T) {
 	task := New("per_src_flow",
 		[]string{"SrcIP"},
 		[]string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		1<<13, 2, SizeThreshold, CountThreshold)
+		1<<15, 2, SizeThreshold, CountThreshold)
 
 	// Ground truth (map-based)
 	countMap := make(map[string]int)
 	sizeMap := make(map[string]int)
 	var mu sync.Mutex // protect maps
 
-	numWorkers := 16 // N 个并发消费者
+	numWorkers := 8 // N 个并发消费者
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
 
@@ -117,9 +117,9 @@ func TestMultiProcess(t *testing.T) {
 			sizeRelErrSum += sizeRE
 		}
 
-		_, err := writer.WriteString(
-			fmt.Sprintf("%s count=%d est=%d size=%d est=%d\n",
-				key, actualCount, estimatedCount, actualSize, estimatedSize))
+		_, err := fmt.Fprintf(writer,
+			"%s %d %d %d %d\n",
+			key, actualCount, estimatedCount, actualSize, estimatedSize)
 		if err != nil {
 			log.Fatalf("Failed to write: %v", err)
 		}
