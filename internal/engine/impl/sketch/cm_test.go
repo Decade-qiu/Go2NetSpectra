@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 )
@@ -23,14 +24,20 @@ func TestCountMin(t *testing.T) {
 	defer pcapReader.Close()
 	log.Printf("Reading packets from '%s'...", pcapFilePath)
 
-	var packetChannel chan *v1.PacketInfo = make(chan *v1.PacketInfo, 10000)
+	packetChannel := make(chan *v1.PacketInfo, 10000)
 
-	thereshold := uint32(8096)
+	Counthreshold := uint32(4096)
+	Sizethreshold := uint32(4096 * 1024)
 
-	// sketch
-	task := New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<15, 3, thereshold)
-	// map
-	hashmap := make(map[string]int)
+	// Initialize CountMin sketch
+	task := New("per_src_flow",
+		[]string{"SrcIP"},
+		[]string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		1<<13, 2, Sizethreshold, Counthreshold)
+
+	// Ground truth (map-based)
+	countMap := make(map[string]int)
+	sizeMap := make(map[string]int)
 
 	var wg sync.WaitGroup
 
@@ -51,7 +58,8 @@ func TestCountMin(t *testing.T) {
 			task.ProcessPacket(info)
 
 			key := info.FiveTuple.SrcIP.String()
-			hashmap[key] += 1
+			countMap[key]++
+			sizeMap[key] += info.Length
 		}
 	})
 
@@ -59,110 +67,175 @@ func TestCountMin(t *testing.T) {
 	pcapReader.ReadPackets(packetChannel)
 	close(packetChannel)
 	wg.Wait()
-	log.Println("Finished reading all packets from pcap file.")
+	log.Println("Finished reading all packets.")
 
-	// per-flow size
+	// ---------------------------
+	// Per-flow error calculation
+	// ---------------------------
 	file, err := os.Create("flow.txt")
 	if err != nil {
 		log.Fatalf("Failed to create output file: %v", err)
 	}
 	defer file.Close()
+
 	writer := bufio.NewWriter(file)
-	if err != nil {
-		log.Fatalf("Failed to create writer: %v", err)
-	}
 	defer writer.Flush()
-	relativeErrorSum := 0.0
-	for key, actualCount := range hashmap {
+
+	countRelErrSum := 0.0
+	sizeRelErrSum := 0.0
+
+	for key, actualCount := range countMap {
+		actualSize := sizeMap[key]
 		flow := net.ParseIP(key).To16()
-		estimatedCount := int(task.Query(flow))
-		relativeError := float64(estimatedCount-actualCount) / float64(actualCount)
-		if relativeError < 0 {
-			relativeError = -relativeError
-		}
-		relativeErrorSum += relativeError
 
-		_, err := writer.WriteString(key + " " + fmt.Sprintf("%d", actualCount) + " " + fmt.Sprintf("%d", estimatedCount) + "\n")
+		result := task.Query(flow)
+		estimatedCount := int(result >> 32)       // upper 32 bits
+		estimatedSize := int(result & 0xffffffff) // lower 32 bits
+
+		// Relative Error (Count)
+		countRE := float64(estimatedCount-actualCount) / float64(actualCount)
+		if countRE < 0 {
+			countRE = -countRE
+		}
+		countRelErrSum += countRE
+
+		// Relative Error (Size)
+		if actualSize > 0 {
+			sizeRE := float64(estimatedSize-actualSize) / float64(actualSize)
+			if sizeRE < 0 {
+				sizeRE = -sizeRE
+			}
+			sizeRelErrSum += sizeRE
+		}
+
+		_, err := writer.WriteString(
+			fmt.Sprintf("%s count=%d est=%d size=%d est=%d\n",
+				key, actualCount, estimatedCount, actualSize, estimatedSize))
 		if err != nil {
-			log.Fatalf("Failed to write to output file: %v", err)
-		}
-	}
-	avgRelativeError := relativeErrorSum / float64(len(hashmap))
-	log.Printf("Per-flow Average Relative Error: %.4f\n", avgRelativeError)
-
-	// heavy hitters
-	res := task.Snapshot().([]statistic.HeavyRecord)
-
-	// Calculate MRE and F1-Score for heavy hitters
-	heavyHitterMRESum := 0.0
-	truePositives := 0
-	falsePositives := 0
-	falseNegatives := 0
-
-	// Create a map of true heavy hitters for efficient lookup
-	trueHeavyHitters := make(map[string]int)
-	for key, count := range hashmap {
-		if uint32(count) >= thereshold {
-			trueHeavyHitters[key] = count
+			log.Fatalf("Failed to write: %v", err)
 		}
 	}
 
-	// Build a set of detected heavy hitters for FN calculation
-	detectedHH := make(map[string]uint32)
-	for _, record := range res {
+	avgCountRE := countRelErrSum / float64(len(countMap))
+	avgSizeRE := sizeRelErrSum / float64(len(sizeMap))
+	log.Printf("Per-flow Avg Relative Error (Count): %.4f", avgCountRE)
+	log.Printf("Per-flow Avg Relative Error (Size): %.4f", avgSizeRE)
+
+	// ---------------------------
+	// Heavy Hitters (Count + Size)
+	// ---------------------------
+	res := task.Snapshot().(statistic.HeavyRecord)
+
+	// Ground truth Count heavy hitters
+	trueCountHH := make(map[string]int)
+	for key, count := range countMap {
+		if uint32(count) >= Counthreshold {
+			trueCountHH[key] = count
+		}
+	}
+	// Ground truth Size heavy hitters
+	trueSizeHH := make(map[string]int)
+	for key, size := range sizeMap {
+		if uint32(size) >= Sizethreshold {
+			trueSizeHH[key] = size
+		}
+	}
+
+	// Detected Count heavy hitters
+	detectedCountHH := make(map[string]uint32)
+	for _, record := range res.Count {
 		key := net.IP(record.Flow).String()
-		detectedHH[key] = record.Count
+		detectedCountHH[key] = record.Count
+	}
+	// Detected Size heavy hitters
+	detectedSizeHH := make(map[string]uint32)
+	for _, record := range res.Size {
+		key := net.IP(record.Flow).String()
+		detectedSizeHH[key] = record.Size
+	}
 
-		if actualCount, isTrue := trueHeavyHitters[key]; isTrue {
+	// Evaluate Count HH
+	countMRE, countPrec, countRec, countF1, tpC, fpC, fnC :=
+		evaluateHeavyHitters(detectedCountHH, trueCountHH)
+	log.Printf("[Count-HH] TP=%d FP=%d FN=%d", tpC, fpC, fnC)
+	log.Printf("[Count-HH] MRE=%.4f Precision=%.4f Recall=%.4f F1=%.4f",
+		countMRE, countPrec, countRec, countF1)
+
+	// Evaluate Size HH
+	sizeMRE, sizePrec, sizeRec, sizeF1, tpS, fpS, fnS :=
+		evaluateHeavyHitters(detectedSizeHH, trueSizeHH)
+	log.Printf("[Size-HH] TP=%d FP=%d FN=%d", tpS, fpS, fnS)
+	log.Printf("[Size-HH] MRE=%.4f Precision=%.4f Recall=%.4f F1=%.4f",
+		sizeMRE, sizePrec, sizeRec, sizeF1)
+}
+
+func evaluateHeavyHitters(detected map[string]uint32, truth map[string]int) (mre, precision, recall, f1 float64, tp, fp, fn int) {
+	mreSum := 0.0
+
+	// Compare detected with ground truth
+	for key, estVal := range detected {
+		if actualVal, isTrue := truth[key]; isTrue {
 			// True Positive
-			truePositives++
-			estimatedCount := int(record.Count)
-			relativeError := float64(estimatedCount-actualCount) / float64(actualCount)
+			tp++
+			relativeError := float64(int(estVal)-actualVal) / float64(actualVal)
 			if relativeError < 0 {
 				relativeError = -relativeError
 			}
-			heavyHitterMRESum += relativeError
+			mreSum += relativeError
 		} else {
 			// False Positive
-			falsePositives++
+			fp++
 		}
 	}
 
 	// False Negatives = true HHs not detected
-	for key := range trueHeavyHitters {
-		if _, found := detectedHH[key]; !found {
-			falseNegatives++
+	for key := range truth {
+		if _, found := detected[key]; !found {
+			fn++
 		}
 	}
 
-	// MRE for Heavy Hitters
-	var heavyHitterMRE float64
-	if truePositives > 0 {
-		heavyHitterMRE = heavyHitterMRESum / float64(truePositives)
+	// Calculate metrics
+	if tp > 0 {
+		mre = mreSum / float64(tp)
 	}
-	log.Printf("Heavy Hitters MRE: %.4f\n", heavyHitterMRE)
-
-	// Precision, Recall, F1
-	precision := 0.0
-	recall := 0.0
-	if (truePositives + falsePositives) > 0 {
-		precision = float64(truePositives) / float64(truePositives+falsePositives)
+	if (tp + fp) > 0 {
+		precision = float64(tp) / float64(tp+fp)
 	}
-	if (truePositives + falseNegatives) > 0 {
-		recall = float64(truePositives) / float64(truePositives+falseNegatives)
+	if (tp + fn) > 0 {
+		recall = float64(tp) / float64(tp+fn)
 	}
-
-	f1Score := 0.0
 	if (precision + recall) > 0 {
-		f1Score = 2 * (precision * recall) / (precision + recall)
+		f1 = 2 * (precision * recall) / (precision + recall)
 	}
 
-	log.Printf("True Positives: %d", truePositives)
-	log.Printf("False Positives: %d", falsePositives)
-	log.Printf("True Negatives: %d", len(hashmap)-truePositives)
-	log.Printf("False Negatives: %d", falseNegatives)
+	printTopN := func(m map[string]int, n int, title string) {
+		type kv struct {
+			Key   string
+			Value int
+		}
+		var arr []kv
+		for k, v := range m {
+			arr = append(arr, kv{k, v})
+		}
+		slices.SortFunc(arr, func(a, b kv) int { return b.Value - a.Value }) // descending
+		if len(arr) > n {
+			arr = arr[:n]
+		}
+		fmt.Printf("%s:\n", title)
+		for _, kv := range arr {
+			fmt.Printf("  %s -> %d\n", kv.Key, kv.Value)
+		}
+	}
 
-	log.Printf("Heavy Hitters Precision: %.4f", precision)
-	log.Printf("Heavy Hitters Recall: %.4f", recall)
-	log.Printf("Heavy Hitters F1-Score: %.4f\n", f1Score)
+	// Convert detected from uint32 to int for printing
+	detectedInt := make(map[string]int, len(detected))
+	for k, v := range detected {
+		detectedInt[k] = int(v)
+	}
+
+	printTopN(truth, 5, "Top-5 Ground Truth HHs")
+	printTopN(detectedInt, 5, "Top-5 Detected HHs")
+
+	return
 }
