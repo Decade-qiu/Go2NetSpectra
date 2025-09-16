@@ -198,7 +198,7 @@ func (t *Task) Reset() {
 
 // Empty
 // Just to satisfy the interface
-func (t *Task) Query(flow []byte) uint32 {
+func (t *Task) Query(flow []byte) uint64 {
 	parts := make([]string, len(t.keyFields))
 	index := 0
 	for i, fieldName := range t.keyFields {
@@ -224,7 +224,7 @@ func (t *Task) Query(flow []byte) uint32 {
 	shard.Mu.RLock()
 	defer shard.Mu.RUnlock()
 	if flow, ok := shard.Flows[key]; ok {
-		return uint32(flow.PacketCount)
+		return flow.PacketCount << 32 | flow.ByteCount
 	}
 	return 0
 }

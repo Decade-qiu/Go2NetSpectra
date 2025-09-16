@@ -7,31 +7,47 @@ import (
 )
 
 const (
-	defaultWidth      = 1 << 20
-	defaultDepth      = 3
-	defaultThereshold = 512
+	defaultWidth           = 1 << 20
+	defaultDepth           = 3
+	defaultSizeThereshold  = 512 * 1024
+	defaultCountThereshold = 512
 )
 
-type Bucket struct {
+type PacketCount struct {
 	FP []byte
 	C  uint32
 }
 
-type CountMin struct {
-	w, d, thereshold uint32
-	seed             []uint32
-	table            [][]Bucket
+type PacketSize struct {
+	FP []byte
+	S  uint32
 }
 
-func NewCountMin(width, depth, thereshold uint32, FS uint32) *CountMin {
+type Bucket struct {
+	Count PacketCount
+	Size  PacketSize
+}
+
+type CountMin struct {
+	w, d            uint32
+	sizeThereshold  uint32
+	countThereshold uint32
+	seed            []uint32
+	table           [][]Bucket
+}
+
+func NewCountMin(width, depth, st, ct uint32, FS uint32) *CountMin {
 	if width == 0 {
 		width = defaultWidth
 	}
 	if depth == 0 {
 		depth = defaultDepth
 	}
-	if thereshold == 0 {
-		thereshold = defaultThereshold
+	if st == 0 {
+		st = defaultSizeThereshold
+	}
+	if ct == 0 {
+		ct = defaultCountThereshold
 	}
 
 	seed := make([]uint32, depth)
@@ -44,35 +60,63 @@ func NewCountMin(width, depth, thereshold uint32, FS uint32) *CountMin {
 		table[i] = make([]Bucket, width)
 		for j := range table[i] {
 			table[i][j] = Bucket{
-				FP: make([]byte, FS),
-				C:  0,
+				Count: PacketCount{
+					FP: make([]byte, FS),
+					C:  0,
+				},
+				Size: PacketSize{
+					FP: make([]byte, FS),
+					S:  0,
+				},
 			}
 		}
 	}
 
 	return &CountMin{
-		w:          width,
-		d:          depth,
-		thereshold: thereshold,
-		seed:       seed,
-		table:      table,
+		w:               width,
+		d:               depth,
+		sizeThereshold:  st,
+		countThereshold: ct,
+		seed:            seed,
+		table:           table,
 	}
 }
 
-func (t *CountMin) Insert(flow, elem []byte) {
+// Implementation of Count-Min Sketch insertion
+func (t *CountMin) Insert(flow, elem []byte, size uint32) {
 	for i := 0; i < int(t.d); i++ {
 		index := MurmurHash3(flow, t.seed[i]) % t.w
-		if t.table[i][index].C == 0 {
-			copy(t.table[i][index].FP, flow)
-			t.table[i][index].C = 1
+		bucket := &t.table[i][index]
+		// Update Packet Size
+		bsize := &bucket.Size
+		if bsize.S == 0 {
+			copy(bsize.FP, flow)
+			bsize.S = size
 		} else {
-			if bytes.Equal(t.table[i][index].FP, flow) {
-				t.table[i][index].C++
+			if bytes.Equal(bsize.FP, flow) {
+				bsize.S += size
 			} else {
-				t.table[i][index].C--
-				if t.table[i][index].C == 0 {
-					copy(t.table[i][index].FP, flow)
-					t.table[i][index].C = 1
+				if size > bsize.S {
+					copy(bsize.FP, flow)
+					bsize.S = size
+				} else {
+					bsize.S -= size
+				}
+			}
+		}
+		// Update Packet Count
+		bcount := &bucket.Count
+		if bcount.C == 0 {
+			copy(bcount.FP, flow)
+			bcount.C = 1
+		} else {
+			if bytes.Equal(bcount.FP, flow) {
+				bcount.C++
+			} else {
+				bcount.C--
+				if bcount.C == 0 {
+					copy(bcount.FP, flow)
+					bcount.C = 1
 				}
 			}
 		}
@@ -81,46 +125,90 @@ func (t *CountMin) Insert(flow, elem []byte) {
 }
 
 // Implementation of Count-Min Sketch query
-func (t *CountMin) Query(flow []byte) uint32 {
-	sz := uint32(0)
+func (t *CountMin) Query(flow []byte) uint64 {
+	sz, ct := uint32(0), uint32(0)
 	for i := 0; i < int(t.d); i++ {
 		index := MurmurHash3(flow, t.seed[i]) % t.w
-		if bytes.Equal(t.table[i][index].FP, flow) {
-			sz = max(sz, t.table[i][index].C)
+		bucket := &t.table[i][index]
+		if bytes.Equal(bucket.Size.FP, flow) {
+			sz = max(sz, bucket.Size.S)
+		}
+		if bytes.Equal(bucket.Count.FP, flow) {
+			ct = max(ct, bucket.Count.C)
 		}
 	}
-	return sz
+	return uint64(ct)<<32 | uint64(sz)
 }
 
-// Implementation of retrieving top-k elements
-func (t *CountMin) HeavyHitters() []HeavyRecord {
-	hh := make(map[string]uint32)
+// HeavyHitters returns the heavy hitters for both Size and Count
+// It scans the CountMin table, finds flows exceeding the threshold,
+// and returns them sorted in descending order.
+func (t *CountMin) HeavyHitters() HeavyRecord {
+	// Temporary maps to track the maximum Size and Count per flow
+	sizeMap := make(map[string]uint32)
+	countMap := make(map[string]uint32)
+
 	for i := 0; i < int(t.d); i++ {
 		for j := 0; j < int(t.w); j++ {
 			bucket := t.table[i][j]
-			if bucket.C > 0 {
-				key := string(bucket.FP)
-				if count, exists := hh[key]; exists {
-					hh[key] = max(count, bucket.C)
+
+			// Update Size map if the bucket has a positive size
+			if bucket.Size.S > 0 {
+				key := string(bucket.Size.FP)
+				if cur, exists := sizeMap[key]; exists {
+					sizeMap[key] = max(cur, bucket.Size.S)
 				} else {
-					hh[key] = bucket.C
+					sizeMap[key] = bucket.Size.S
+				}
+			}
+
+			// Update Count map if the bucket has a positive count
+			if bucket.Count.C > 0 {
+				key := string(bucket.Count.FP)
+				if cur, exists := countMap[key]; exists {
+					countMap[key] = max(cur, bucket.Count.C)
+				} else {
+					countMap[key] = bucket.Count.C
 				}
 			}
 		}
 	}
-	heavyHitters := make([]HeavyRecord, 0)
-	for k, v := range hh {
-		if v < t.thereshold {
-			continue
+
+	// Construct HeavySize list for flows whose Size >= threshold
+	heavySizes := make([]HeavySize, 0)
+	for k, sz := range sizeMap {
+		if sz >= t.sizeThereshold {
+			heavySizes = append(heavySizes, HeavySize{
+				Flow: []byte(k),
+				Size: sz,
+			})
 		}
-		heavyHitters = append(heavyHitters, HeavyRecord{
-			Flow:  []byte(k),
-			Count: v,
-		})
 	}
-	// Sort heavy hitters by count in descending order
-	slices.SortFunc(heavyHitters, func(a, b HeavyRecord) int {
+
+	// Construct HeavyCount list for flows whose Count >= threshold
+	heavyCounts := make([]HeavyCount, 0)
+	for k, ct := range countMap {
+		if ct >= t.countThereshold {
+			heavyCounts = append(heavyCounts, HeavyCount{
+				Flow:  []byte(k),
+				Count: ct,
+			})
+		}
+	}
+
+	// Sort HeavySize list in descending order by Size
+	slices.SortFunc(heavySizes, func(a, b HeavySize) int {
+		return int(b.Size) - int(a.Size)
+	})
+
+	// Sort HeavyCount list in descending order by Count
+	slices.SortFunc(heavyCounts, func(a, b HeavyCount) int {
 		return int(b.Count) - int(a.Count)
 	})
-	return heavyHitters
+
+	// Return combined HeavyRecord
+	return HeavyRecord{
+		Size:  heavySizes,
+		Count: heavyCounts,
+	}
 }

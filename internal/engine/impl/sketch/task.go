@@ -21,7 +21,7 @@ func init() {
 		// Create all tasks for this aggregator group
 		tasks := make([]model.Task, len(exactCfg.Tasks))
 		for i, taskCfg := range exactCfg.Tasks {
-			tasks[i] = New(taskCfg.Name, taskCfg.FlowFields, taskCfg.ElementFields, taskCfg.Width, taskCfg.Depth, taskCfg.Thereshold)
+			tasks[i] = New(taskCfg.Name, taskCfg.FlowFields, taskCfg.ElementFields, taskCfg.Width, taskCfg.Depth, taskCfg.SizeThereshold, taskCfg.CountThereshold)
 		}
 
 		return tasks, writers, nil
@@ -52,7 +52,7 @@ type Task struct {
 }
 
 // New creates a new Sketch task with the given name, flow fields, and element fields.
-func New(name string, flowFields, elementFields []string, w, d, thereshold uint32) model.Task {
+func New(name string, flowFields, elementFields []string, w, d, st, ct uint32) model.Task {
 	flowSize := uint32(0)
 	for _, f := range flowFields {
 		flowSize += fieldByteSize(f)
@@ -62,8 +62,8 @@ func New(name string, flowFields, elementFields []string, w, d, thereshold uint3
 		elemSize += fieldByteSize(f)
 	}
 
-	log.Printf("Creating Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d) with width %d, depth %d, thereshold %d\n",
-		name, flowFields, flowSize, elementFields, elemSize, w, d, thereshold)
+	log.Printf("Creating Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d) with width %d, depth %d, size_thereshold %d, count_thereshold %d\n",
+		name, flowFields, flowSize, elementFields, elemSize, w, d, st, ct)
 
 	return &Task{
 		name:          name,
@@ -71,7 +71,7 @@ func New(name string, flowFields, elementFields []string, w, d, thereshold uint3
 		elementFields: elementFields,
 		flowSize:      flowSize,
 		elemSize:      elemSize,
-		sketch:        statistic.NewCountMin(w, d, thereshold, flowSize),
+		sketch:        statistic.NewCountMin(w, d, st, ct, flowSize),
 	}
 }
 
@@ -88,10 +88,10 @@ func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 		return
 	}
 
-	t.sketch.Insert(flow, elem)
+	t.sketch.Insert(flow, elem, uint32(packetInfo.Length))
 }
 
-func (t *Task) Query(flow []byte) uint32 {
+func (t *Task) Query(flow []byte) uint64 {
 	return t.sketch.Query(flow)
 }
 
