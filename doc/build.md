@@ -112,13 +112,18 @@ docker compose up --build
 
 ---
 
-## 6. 算法验证测试
+## 6. 算法验证与性能测试
 
-项目包含对 `sketch` 等估计算法的单元测试，用于验证其准确性。
+项目包含对 `sketch` 等估计算法的单元测试和性能基准测试。
 
-**运行 Count-Min Sketch 测试**:
+**运行 Count-Min Sketch 准确性与并发测试**:
 ```sh
 go test -v ./internal/engine/impl/sketch/
+```
+
+**运行 `sketch` 与 `exact` 的性能对比基准测试**:
+```sh
+go test -bench=. ./internal/engine/impl/benchmark/
 ```
 
 ---

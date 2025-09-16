@@ -159,16 +159,13 @@ graph TD
     2.  **结构化数据载体**: 我们在 `statistic.Flow` 结构体中增加了一个 `map[string]interface{}` 类型的 `Fields` 字段。当一个 `Flow` 被创建时，构成其聚合键的实际字段和值会被存入这个 `map` 中。
     3.  **写入时动态映射**: `ClickHouseWriter` 在写入数据时，会遍历 `Flow` 的 `Fields` map，并将其中的值动态地映射到 `flow_metrics` 表对应的列中。对于 `Fields` map 中不存在的字段，数据库将自动填充为 `NULL`。这个方案不仅解决了动态存储的问题，还使得跨不同聚合任务的复杂查询成为可能。
 
-### 挑战四：ClickHouse 查询的复杂性与正确性
+### 挑战五：高并发下的 Sketch 性能瓶颈
 
-- **问题描述**: 由于 `ns-engine` 会在每个 `snapshot_interval` 周期性地写入全量快照，导致 `flow_metrics` 表中存在大量重复的、历史性的流记录。直接使用 `SUM()` 等聚合函数会导致结果被严重夸大。如何从这些包含历史状态的数据中，查询出准确的、去重后的聚合结果？
+- **问题描述**: 在高并发的抓包场景下，`ns-probe` 的多个 `worker` 协程会同时调用 `Sketch.Insert` 方法。如果 `Insert` 方法内部使用互斥锁（`sync.Mutex`）来保护其二维数组，那么锁竞争将成为严重的性能瓶颈，无法充分发挥多核 CPU 的优势。
 
-- **解决方案：使用 `argMax` 函数进行去重**
-    1.  **`argMax` 的应用**: 我们利用了 ClickHouse 强大的 `argMax(arg, val)` 函数。这个函数能返回 `val` 值最大时对应的 `arg` 的值。我们用它来“去重”：`argMax(ByteCount, Timestamp)` 会返回具有最新 `Timestamp` 的那条记录的 `ByteCount` 值。
-    2.  **子查询与两阶段聚合**: 我们的最终查询采用了一个两阶段的聚合模式：
-        *   **内层子查询**: 首先，按流的唯一标识（`TaskName` 加上所有可能的键字段）进行 `GROUP BY`。在每个流的分组内，使用 `argMax` 找出该流最新的 `ByteCount` 和 `PacketCount`。
-        *   **外层查询**: 然后，对外层查询的结果（即所有流的最新状态集合）进行最终的 `SUM()` 聚合，从而得到准确的总量统计。
-    3.  **语法陷阱**: 在实现过程中，我们还解决了 ClickHouse 的一些语法陷阱，例如 `GROUP BY` 子句中不能包含聚合函数的别名，以及 `SELECT` 子句中非聚合列必须出现在 `GROUP BY` 子句中等问题。
+- **解决方案：基于原子操作的无锁更新**
+    1.  **CAS 循环**: 我们没有采用简单的锁，而是在 `Insert` 方法中为每个计数器（包数和字节数）的更新都实现了一个基于 `atomic.CompareAndSwapUint32` (CAS) 的无锁循环。`worker` 会在一个循环中不断尝试原子性地更新计数器，直到成功为止。这避免了 goroutine 的挂起和上下文切换，在高争用（high-contention）场景下，其性能远超互斥锁。
+    2.  **数据结构调整**: 为了配合原子操作，我们将 `Bucket` 结构体拆分为独立的 `PacketCount` 和 `PacketSize`，并确保其计数字段是 `atomic` 包可以直接操作的 `uint32` 类型。这个方案在保证了高吞吐的同时，也通过精心设计的算法逻辑，维持了 Heavy Hitter 发现的准确性。
 
 ---
 
@@ -260,5 +257,8 @@ sequenceDiagram
 
 - **`configs/config.yaml`**: 专用于本地开发。在此文件中，所有服务地址（如 NATS, ClickHouse）都配置为 `localhost`，以便于本地运行的 Go 程序连接到通过 Docker 暴露在主机上的依赖服务。
 - **`configs/config.docker.yaml`**: 专用于容器化部署。此文件在构建 Docker 镜像时会被复制到容器的 `/configs/config.yaml` 路径。其中，所有服务地址都使用 Docker Compose 的服务名（如 `nats`, `clickhouse`），以利用 Docker 的内部 DNS 进行服务发现。
+
+这种分离确保了两种开发模式可以无缝切换，而无需在每次切换时手动修改配置。
+�在构建 Docker 镜像时会被复制到容器的 `/configs/config.yaml` 路径。其中，所有服务地址都使用 Docker Compose 的服务名（如 `nats`, `clickhouse`），以利用 Docker 的内部 DNS 进行服务发现。
 
 这种分离确保了两种开发模式可以无缝切换，而无需在每次切换时手动修改配置。
