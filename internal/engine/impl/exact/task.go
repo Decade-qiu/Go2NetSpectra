@@ -62,6 +62,13 @@ func init() {
 
 // --- Task Implementation ---
 
+const (
+	IPv4ByteSize = 4
+	IPv6ByteSize = 16
+	PortByteSize = 2
+	ProtoByteSize = 1
+)
+
 const defaultShardCount = 256
 
 // Task performs exact aggregation for a specific set of key fields using a sharded map.
@@ -192,6 +199,33 @@ func (t *Task) Reset() {
 // Empty
 // Just to satisfy the interface
 func (t *Task) Query(flow []byte) uint32 {
+	parts := make([]string, len(t.keyFields))
+	index := 0
+	for i, fieldName := range t.keyFields {
+		switch fieldName {
+		case "SrcIP", "DstIP":
+			val := string(flow[index : index+IPv6ByteSize])
+			parts[i] = val
+			index += IPv6ByteSize
+		case "SrcPort", "DstPort":
+			val := uint16(flow[index])<<8 | uint16(flow[index+1])
+			parts[i] = strconv.Itoa(int(val))
+			index += PortByteSize
+		case "Protocol":
+			val := uint8(flow[index])
+			parts[i] = strconv.Itoa(int(val))
+			index += ProtoByteSize
+		default:
+			return 0
+		}
+	}
+	key := strings.Join(parts, "-")
+	shard := t.getShard(key)
+	shard.Mu.RLock()
+	defer shard.Mu.RUnlock()
+	if flow, ok := shard.Flows[key]; ok {
+		return uint32(flow.PacketCount)
+	}
 	return 0
 }
 
@@ -210,11 +244,11 @@ func (t *Task) generateKeyAndFields(ft model.FiveTuple) (map[string]interface{},
 	for i, fieldName := range t.keyFields {
 		switch fieldName {
 		case "SrcIP":
-			val := ft.SrcIP.String()
+			val := ft.SrcIP.To16().String()
 			parts[i] = val
 			fields[fieldName] = val
 		case "DstIP":
-			val := ft.DstIP.String()
+			val := ft.DstIP.To16().String()
 			parts[i] = val
 			fields[fieldName] = val
 		case "SrcPort":
