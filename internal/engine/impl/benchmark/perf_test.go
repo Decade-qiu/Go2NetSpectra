@@ -1,0 +1,95 @@
+package test
+
+import (
+	v1 "Go2NetSpectra/api/gen/v1"
+	"Go2NetSpectra/internal/engine/impl/exact"
+	"Go2NetSpectra/internal/engine/impl/sketch"
+	"Go2NetSpectra/internal/model"
+	"Go2NetSpectra/pkg/pcap"
+	"log"
+	"net"
+	"testing"
+)
+
+var packets []*model.PacketInfo
+
+
+func BenchmarkAggregator(b *testing.B) {
+	pcapFilePath := "../../../../test/data/caida.pcap"
+	pcapReader, err := pcap.NewReader(pcapFilePath)
+	if err != nil {
+		b.Fatalf("Failed to open pcap file: %v", err)
+	}
+	defer pcapReader.Close()
+	log.Printf("Reading packets from '%s'...", pcapFilePath)
+
+	packetChannel := make(chan *v1.PacketInfo, 10000)
+	go func() {
+		pcapReader.ReadPackets(packetChannel)
+		close(packetChannel)
+	}()
+
+	for pbPacket := range packetChannel {
+		info := &model.PacketInfo{
+			Timestamp: pbPacket.Timestamp.AsTime(),
+			Length:    int(pbPacket.Length),
+			FiveTuple: model.FiveTuple{
+				SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp),
+				DstIP:    net.IP(pbPacket.FiveTuple.DstIp),
+				SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
+				DstPort:  uint16(pbPacket.FiveTuple.DstPort),
+				Protocol: uint8(pbPacket.FiveTuple.Protocol),
+			},
+		}
+		packets = append(packets, info)
+	}
+
+	run_sketch(b)
+	run_exact(b)
+}
+
+func run_sketch(b *testing.B) {
+	Counthreshold := uint32(4096)
+	Sizethreshold := uint32(4096 * 1024)
+	task := sketch.New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<13, 2, Sizethreshold, Counthreshold)
+
+	b.Run("Insert_Sketch", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, pkt := range packets {
+				task.ProcessPacket(pkt)
+			}
+		}
+	})
+
+	b.Run("Query_Sketch", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, pkt := range packets {
+				task.Query(pkt.FiveTuple.SrcIP.To16())
+			}
+		}
+	})
+}
+
+func run_exact(b *testing.B) {
+	task := exact.New("exact_per_src", []string{"SrcIP"}, 64)
+
+	b.Run("Insert_Exact", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, pkt := range packets {
+				task.ProcessPacket(pkt)
+			}
+		}
+	})
+
+	b.Run("Query_Exact", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, pkt := range packets {
+				task.Query(pkt.FiveTuple.SrcIP.To16())
+			}
+		}
+	})
+}
