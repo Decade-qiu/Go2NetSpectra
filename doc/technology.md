@@ -53,7 +53,9 @@ graph TD
 
 - **异步持久化探针**: `ns-probe` 在将数据包发布到 NATS 之前，可以选择性地将数据包**异步**写入本地文件。我们为此设计了一个 `persistent.Worker`，它内部维护一个带缓冲的 channel 和一个独立的协程池。`Publisher` 只需将数据包（原始 `gopacket.Packet` 或解析后的 `model.PacketInfo`）非阻塞地发送到 channel 中，独立的 worker 协程会负责处理磁盘 I/O。这种设计将磁盘写入的延迟与网络发布的主路径完全解耦，确保了持久化功能不会影响探针的抓包和发布性能。
 - **并发模型：Worker Pool + Channel**: `Manager` 内部启动一个可配置的 **Worker Pool** 并发地处理数据包，充分利用多核CPU资源。数据包通过 `channel` 在生产者和消费者（Worker）之间传递，实现了I/O与计算的并行。
-- **无锁并发：分片 (Sharding)**: 在 `exacttask` 内部，为了解决并发访问聚合 `map` 时的锁竞争问题，我们采用了 **分片（Sharding）** 的设计。通过对流的 Key 进行哈希，将不同流的更新压力分散到多个独立的、由独立锁保护的 `map` 中，显著提升了并发性能。
+- **无锁并发：分片 (Sharding) 与原子操作**: 
+    - 在 `exact` 精确统计任务中，为了解决并发访问聚合 `map` 时的锁竞争问题，我们采用了 **分片（Sharding）** 的设计。通过对流的 Key 进行哈希，将不同流的更新压力分散到多个独立的、由独立锁保护的 `map` 中，显著提升了并发性能。
+    - 在 `sketch` 估算任务中，我们更进一步，在 `CountMin.Insert` 方法中为每个计数器（包数和字节数）的更新都实现了一个基于 **`atomic.CompareAndSwapUint32` (CAS)** 的无锁循环。这避免了 goroutine 的挂起和上下文切换，在高争用（high-contention）场景下，其性能远超互斥锁。
 - **只读快照 (Read-Only Snapshot)**: `Task` 的 `Snapshot()` 方法现在严格执行**只读操作**。它会返回当前聚合数据的**深拷贝副本**，确保在数据写入过程中，聚合任务的内部状态不会被修改，从而避免了并发写入时的数据不一致问题。
 - **周期性重置 (Periodic Reset)**: `Manager` 引入了一个独立的 `resetter` 协程，根据全局配置的 `period` 定期触发所有 `Task` 的 `Reset()` 方法。`Reset()` 方法负责原子性地清空 `Task` 的内部聚合状态，为新的测量周期做准备。这种机制将数据读取（快照）和数据清零（重置）的职责彻底分离，保证了数据在每个测量周期内的完整性和准确性。
 - **灵活的写入器调度**: 每个 `Writer` 都可以独立配置其 `snapshot_interval`。`Manager` 会为每个启用的 `Writer` 启动一个独立的 `snapshotter` 协程，按照各自的 `snapshot_interval` 频率从 `Task` 获取只读快照并进行持久化。这使得不同数据目标可以有不同的写入频率，极大地提升了系统的灵活性。
@@ -159,13 +161,16 @@ graph TD
     2.  **结构化数据载体**: 我们在 `statistic.Flow` 结构体中增加了一个 `map[string]interface{}` 类型的 `Fields` 字段。当一个 `Flow` 被创建时，构成其聚合键的实际字段和值会被存入这个 `map` 中。
     3.  **写入时动态映射**: `ClickHouseWriter` 在写入数据时，会遍历 `Flow` 的 `Fields` map，并将其中的值动态地映射到 `flow_metrics` 表对应的列中。对于 `Fields` map 中不存在的字段，数据库将自动填充为 `NULL`。这个方案不仅解决了动态存储的问题，还使得跨不同聚合任务的复杂查询成为可能。
 
-### 挑战五：高并发下的 Sketch 性能瓶颈
+### 挑战四：ClickHouse 查询的复杂性与正确性
 
-- **问题描述**: 在高并发的抓包场景下，`ns-probe` 的多个 `worker` 协程会同时调用 `Sketch.Insert` 方法。如果 `Insert` 方法内部使用互斥锁（`sync.Mutex`）来保护其二维数组，那么锁竞争将成为严重的性能瓶颈，无法充分发挥多核 CPU 的优势。
+- **问题描述**: 由于 `ns-engine` 会在每个 `snapshot_interval` 周期性地写入全量快照，导致 `flow_metrics` 表中存在大量重复的、历史性的流记录。直接使用 `SUM()` 等聚合函数会导致结果被严重夸大。如何从这些包含历史状态的数据中，查询出准确的、去重后的聚合结果？
 
-- **解决方案：基于原子操作的无锁更新**
-    1.  **CAS 循环**: 我们没有采用简单的锁，而是在 `Insert` 方法中为每个计数器（包数和字节数）的更新都实现了一个基于 `atomic.CompareAndSwapUint32` (CAS) 的无锁循环。`worker` 会在一个循环中不断尝试原子性地更新计数器，直到成功为止。这避免了 goroutine 的挂起和上下文切换，在高争用（high-contention）场景下，其性能远超互斥锁。
-    2.  **数据结构调整**: 为了配合原子操作，我们将 `Bucket` 结构体拆分为独立的 `PacketCount` 和 `PacketSize`，并确保其计数字段是 `atomic` 包可以直接操作的 `uint32` 类型。这个方案在保证了高吞吐的同时，也通过精心设计的算法逻辑，维持了 Heavy Hitter 发现的准确性。
+- **解决方案：使用 `argMax` 函数进行去重**
+    1.  **`argMax` 的应用**: 我们利用了 ClickHouse 强大的 `argMax(arg, val)` 函数。这个函数能返回 `val` 值最大时对应的 `arg` 的值。我们用它来“去重”：`argMax(ByteCount, Timestamp)` 会返回具有最新 `Timestamp` 的那条记录的 `ByteCount` 值。
+    2.  **子查询与两阶段聚合**: 我们的最终查询采用了一个两阶段的聚合模式：
+        *   **内层子查询**: 首先，按流的唯一标识（`TaskName` 加上所有可能的键字段）进行 `GROUP BY`。在每个流的分组内，使用 `argMax` 找出该流最新的 `ByteCount` 和 `PacketCount`。
+        *   **外层查询**: 然后，对外层查询的结果（即所有流的最新状态集合）进行最终的 `SUM()` 聚合，从而得到准确的总量统计。
+    3.  **语法陷阱**: 在实现过程中，我们还解决了 ClickHouse 的一些语法陷阱，例如 `GROUP BY` 子句中不能包含聚合函数的别名，以及 `SELECT` 子句中非聚合列必须出现在 `GROUP BY` 子句中等问题。
 
 ---
 
@@ -257,8 +262,5 @@ sequenceDiagram
 
 - **`configs/config.yaml`**: 专用于本地开发。在此文件中，所有服务地址（如 NATS, ClickHouse）都配置为 `localhost`，以便于本地运行的 Go 程序连接到通过 Docker 暴露在主机上的依赖服务。
 - **`configs/config.docker.yaml`**: 专用于容器化部署。此文件在构建 Docker 镜像时会被复制到容器的 `/configs/config.yaml` 路径。其中，所有服务地址都使用 Docker Compose 的服务名（如 `nats`, `clickhouse`），以利用 Docker 的内部 DNS 进行服务发现。
-
-这种分离确保了两种开发模式可以无缝切换，而无需在每次切换时手动修改配置。
-�在构建 Docker 镜像时会被复制到容器的 `/configs/config.yaml` 路径。其中，所有服务地址都使用 Docker Compose 的服务名（如 `nats`, `clickhouse`），以利用 Docker 的内部 DNS 进行服务发现。
 
 这种分离确保了两种开发模式可以无缝切换，而无需在每次切换时手动修改配置。
