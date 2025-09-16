@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"math/rand/v2"
 	"slices"
+	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -26,6 +28,7 @@ type PacketSize struct {
 type Bucket struct {
 	Count PacketCount
 	Size  PacketSize
+	Mu    sync.RWMutex
 }
 
 type CountMin struct {
@@ -87,39 +90,96 @@ func (t *CountMin) Insert(flow, elem []byte, size uint32) {
 	for i := 0; i < int(t.d); i++ {
 		index := MurmurHash3(flow, t.seed[i]) % t.w
 		bucket := &t.table[i][index]
-		// Update Packet Size
-		bsize := &bucket.Size
-		if bsize.S == 0 {
-			copy(bsize.FP, flow)
-			bsize.S = size
-		} else {
-			if bytes.Equal(bsize.FP, flow) {
-				bsize.S += size
-			} else {
-				if size > bsize.S {
-					copy(bsize.FP, flow)
-					bsize.S = size
-				} else {
-					bsize.S -= size
-				}
-			}
-		}
-		// Update Packet Count
-		bcount := &bucket.Count
-		if bcount.C == 0 {
-			copy(bcount.FP, flow)
-			bcount.C = 1
-		} else {
-			if bytes.Equal(bcount.FP, flow) {
-				bcount.C++
-			} else {
-				bcount.C--
-				if bcount.C == 0 {
-					copy(bcount.FP, flow)
-					bcount.C = 1
-				}
-			}
-		}
+		// // Update Packet Size
+		// bucket.Mu.Lock()
+		// bsize := &bucket.Size
+		// if bsize.S == 0 {
+		// 	copy(bsize.FP, flow)
+		// 	bsize.S = size
+		// } else {
+		// 	if bytes.Equal(bsize.FP, flow) {
+		// 		bsize.S += size
+		// 	} else {
+		// 		if size > bsize.S {
+		// 			copy(bsize.FP, flow)
+		// 			bsize.S = size
+		// 		} else {
+		// 			bsize.S -= size
+		// 		}
+		// 	}
+		// }
+		// // Update Packet Count
+		// bcount := &bucket.Count
+		// if bcount.C == 0 {
+		// 	copy(bcount.FP, flow)
+		// 	bcount.C = 1
+		// } else {
+		// 	if bytes.Equal(bcount.FP, flow) {
+		// 		bcount.C++
+		// 	} else {
+		// 		bcount.C--
+		// 		if bcount.C == 0 {
+		// 			copy(bcount.FP, flow)
+		// 			bcount.C = 1
+		// 		}
+		// 	}
+		// }
+		// bucket.Mu.Unlock()
+
+		for {
+            bsize := &bucket.Size
+            currentS := atomic.LoadUint32(&bsize.S)
+            if currentS == 0 {
+                if atomic.CompareAndSwapUint32(&bsize.S, 0, size) {
+                    copy(bsize.FP, flow)
+                    break
+                }
+            } else {
+                if bytes.Equal(bsize.FP, flow) {
+                    newS := currentS + size
+                    if atomic.CompareAndSwapUint32(&bsize.S, currentS, newS) {
+                        break
+                    }
+                } else {
+                    if size > currentS {
+                        if atomic.CompareAndSwapUint32(&bsize.S, currentS, size) {
+                            copy(bsize.FP, flow)
+                            break
+                        }
+                    } else {
+                        newS := currentS - size
+                        if atomic.CompareAndSwapUint32(&bsize.S, currentS, newS) {
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        for {
+            bcount := &bucket.Count
+            currentC := atomic.LoadUint32(&bcount.C)
+            if currentC == 0 {
+                if atomic.CompareAndSwapUint32(&bcount.C, 0, 1) {
+                    copy(bcount.FP, flow)
+                    break
+                }
+            } else {
+                if bytes.Equal(bcount.FP, flow) {
+                    newC := currentC + 1
+                    if atomic.CompareAndSwapUint32(&bcount.C, currentC, newC) {
+                        break
+                    }
+                } else {
+                    newC := currentC - 1
+                    if atomic.CompareAndSwapUint32(&bcount.C, currentC, newC) {
+                        if newC == 0 {
+                            copy(bcount.FP, flow)
+                        }
+                        break
+                    }
+                }
+            }
+        }
 	}
 
 }
@@ -150,7 +210,7 @@ func (t *CountMin) HeavyHitters() HeavyRecord {
 
 	for i := 0; i < int(t.d); i++ {
 		for j := 0; j < int(t.w); j++ {
-			bucket := t.table[i][j]
+			bucket := &t.table[i][j]
 
 			// Update Size map if the bucket has a positive size
 			if bucket.Size.S > 0 {
