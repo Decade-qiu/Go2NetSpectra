@@ -50,7 +50,7 @@ type SketchTaskDef struct {
 	ElementFields []string `yaml:"element_fields"`
 	Width    uint32   `yaml:"width"`
 	Depth    uint32   `yaml:"depth"`
-	TopK     uint32   `yaml:"top_k"`
+	Thereshold     uint32   `yaml:"thereshold"`
 }
 
 // SketchTaskDef defines a single task's parameters within the sketch aggregator group.

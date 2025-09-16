@@ -21,7 +21,7 @@ func init() {
 		// Create all tasks for this aggregator group
 		tasks := make([]model.Task, len(exactCfg.Tasks))
 		for i, taskCfg := range exactCfg.Tasks {
-			tasks[i] = New(taskCfg.Name, taskCfg.FlowFields, taskCfg.ElementFields, taskCfg.Width, taskCfg.Depth, taskCfg.TopK)
+			tasks[i] = New(taskCfg.Name, taskCfg.FlowFields, taskCfg.ElementFields, taskCfg.Width, taskCfg.Depth, taskCfg.Thereshold)
 		}
 
 		return tasks, writers, nil
