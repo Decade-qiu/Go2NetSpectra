@@ -90,42 +90,8 @@ func (t *CountMin) Insert(flow, elem []byte, size uint32) {
 	for i := 0; i < int(t.d); i++ {
 		index := MurmurHash3(flow, t.seed[i]) % t.w
 		bucket := &t.table[i][index]
-		// // Update Packet Size
-		// bucket.Mu.Lock()
-		// bsize := &bucket.Size
-		// if bsize.S == 0 {
-		// 	copy(bsize.FP, flow)
-		// 	bsize.S = size
-		// } else {
-		// 	if bytes.Equal(bsize.FP, flow) {
-		// 		bsize.S += size
-		// 	} else {
-		// 		if size > bsize.S {
-		// 			copy(bsize.FP, flow)
-		// 			bsize.S = size
-		// 		} else {
-		// 			bsize.S -= size
-		// 		}
-		// 	}
-		// }
-		// // Update Packet Count
-		// bcount := &bucket.Count
-		// if bcount.C == 0 {
-		// 	copy(bcount.FP, flow)
-		// 	bcount.C = 1
-		// } else {
-		// 	if bytes.Equal(bcount.FP, flow) {
-		// 		bcount.C++
-		// 	} else {
-		// 		bcount.C--
-		// 		if bcount.C == 0 {
-		// 			copy(bcount.FP, flow)
-		// 			bcount.C = 1
-		// 		}
-		// 	}
-		// }
-		// bucket.Mu.Unlock()
 
+		// Update Size
 		for {
             bsize := &bucket.Size
             currentS := atomic.LoadUint32(&bsize.S)
@@ -155,6 +121,7 @@ func (t *CountMin) Insert(flow, elem []byte, size uint32) {
                 }
             }
         }
+		// Update Count
         for {
             bcount := &bucket.Count
             currentC := atomic.LoadUint32(&bcount.C)
