@@ -39,7 +39,7 @@ func TestMultiProcess(t *testing.T) {
 	sizeMap := make(map[string]int)
 	var mu sync.Mutex // protect maps
 
-	numWorkers := 8 // N 个并发消费者
+	numWorkers := 28 // N 个并发消费者
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
 
@@ -51,8 +51,8 @@ func TestMultiProcess(t *testing.T) {
 					Timestamp: pbPacket.Timestamp.AsTime(),
 					Length:    int(pbPacket.Length),
 					FiveTuple: model.FiveTuple{
-						SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp),
-						DstIP:    net.IP(pbPacket.FiveTuple.DstIp),
+						SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
+						DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
 						SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
 						DstPort:  uint16(pbPacket.FiveTuple.DstPort),
 						Protocol: uint8(pbPacket.FiveTuple.Protocol),
