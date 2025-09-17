@@ -239,3 +239,22 @@ func (t *CountMin) HeavyHitters() HeavyRecord {
 		Count: heavyCounts,
 	}
 }
+
+// Reset clears the internal state of the CountMin sketch.
+func (t *CountMin) Reset() {
+	for i := 0; i < int(t.d); i++ {
+		for j := 0; j < int(t.w); j++ {
+			bucket := &t.table[i][j]
+			bucket.Mu.Lock()
+			bucket.Count.C = 0
+			for k := range bucket.Count.FP {
+				bucket.Count.FP[k] = 0
+			}
+			bucket.Size.S = 0
+			for k := range bucket.Size.FP {
+				bucket.Size.FP[k] = 0
+			}
+			bucket.Mu.Unlock()
+		}
+	}
+}

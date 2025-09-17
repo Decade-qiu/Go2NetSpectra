@@ -116,12 +116,13 @@ func (t *Task) Query(flow []byte) uint64 {
 	return t.sketch.Query(flow)
 }
 
-func (t *Task) Snapshot() interface{} {
+func (t *Task) Snapshot() any {
 	return t.sketch.HeavyHitters()
 }
 
 // Reset clears the internal state of the task, preparing for a new measurement period.
 func (t *Task) Reset() {
+	t.sketch.Reset()
 }
 
 // generateFlowAndElem creates Flow and Element keys based on the configured fields.

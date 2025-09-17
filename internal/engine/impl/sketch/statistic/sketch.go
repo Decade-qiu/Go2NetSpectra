@@ -6,6 +6,7 @@ type Sketch interface {
 	Insert(flow, elem []byte, size uint32)
 	Query(flow []byte) uint64
 	HeavyHitters() HeavyRecord
+	Reset()
 }
 
 type HeavySize struct {
