@@ -105,6 +105,18 @@ func (t *Task) Name() string {
 	return t.name
 }
 
+// Fields 
+func (t *Task) Fields() []string {
+	return []string{}
+}
+
+// Func 
+func (t *Task) DecodeFlowFunc() func(flow []byte, fields []string) string {
+	return func(flow []byte, fields []string) string {
+		return ""
+	}
+}
+
 // ProcessPacket processes a single packet, creating or updating a flow in the correct shard.
 func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 	fields, key, err := t.generateKeyAndFields(packetInfo.FiveTuple)

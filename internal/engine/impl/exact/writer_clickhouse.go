@@ -85,7 +85,7 @@ func connect(cfg config.ClickHouseConfig) (driver.Conn, error) {
 }
 
 // Write inserts flow data into the ClickHouse flow_metrics table.
-func (w *ClickHouseWriter) Write(payload interface{}, timestamp string) error {
+func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fields []string, decodeFlowFunc func(flow []byte, fields []string) string) error {
 	snapshot, ok := payload.(statistic.SnapshotData)
 	if !ok {
 		return fmt.Errorf("invalid payload type for ClickHouse Writer: expected statistic.SnapshotData, got %T", payload)

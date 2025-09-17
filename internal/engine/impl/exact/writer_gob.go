@@ -45,7 +45,7 @@ func (w *GobWriter) GetInterval() time.Duration {
 
 // Write serializes and writes the data from a single aggregation task snapshot to disk.
 // It expects the payload to be of type exact.SnapshotData.
-func (w *GobWriter) Write(payload interface{}, timestamp string) error {
+func (w *GobWriter) Write(payload interface{}, timestamp, name string, fields []string, decodeFlowFunc func(flow []byte, fields []string) string) error {
 	snapshot, ok := payload.(statistic.SnapshotData)
 	if !ok {
 		return fmt.Errorf("invalid payload type for GobWriter: expected statistic.SnapshotData, got %T", payload)
