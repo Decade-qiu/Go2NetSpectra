@@ -3,7 +3,8 @@ package manager
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
-	_ "Go2NetSpectra/internal/engine/impl/exact" // Registers exact task aggregator
+	_ "Go2NetSpectra/internal/engine/impl/exact"  // Registers exact task aggregator
+	_ "Go2NetSpectra/internal/engine/impl/sketch" // Registers sketch task aggregator
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
 	"fmt"
@@ -119,7 +120,7 @@ func (m *Manager) takeSnapshotForWriter(writer model.Writer) {
 		go func(t model.Task) {
 			defer wg.Done()
 			snapshotData := task.Snapshot()
-			if err := writer.Write(snapshotData, timestamp); err != nil {
+			if err := writer.Write(snapshotData, timestamp, task.Name(), task.Fields(), task.DecodeFlowFunc()); err != nil {
 				log.Printf("Error writing snapshot for task %s: %v", task.Name(), err)
 			}
 		}(task)

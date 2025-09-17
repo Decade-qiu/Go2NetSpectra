@@ -8,4 +8,6 @@ type Task interface {
 	Reset()
 	Name() string
 	Query(flow []byte) uint64
+	Fields() []string
+	DecodeFlowFunc() func(flow []byte, fields []string) string
 }

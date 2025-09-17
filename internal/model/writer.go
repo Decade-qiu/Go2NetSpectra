@@ -6,7 +6,7 @@ import "time"
 type Writer interface {
 	// Write takes a data payload and persists it.
 	// The implementation is expected to know how to handle the payload type it receives.
-	Write(payload interface{}, timestamp string) error
+	Write(payload interface{}, timestamp, name string, fields []string, decodeFlowFunc func(flow []byte, fields []string) string) error
 
 	// GetInterval returns the configured snapshot interval for this writer.
 	GetInterval() time.Duration
