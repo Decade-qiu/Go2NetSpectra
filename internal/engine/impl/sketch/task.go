@@ -6,6 +6,7 @@ import (
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
 	"log"
+	"sync"
 )
 
 // --- Factory Registration ---
@@ -35,6 +36,21 @@ const (
 	IPv6ByteSize = 16
 	PortByteSize = 2
 	ProtoByteSize = 1
+
+	MaxFieldSize = 37 // IPv6(16) + IPv6(16) + Port(2) + Port(2) + Proto(1) = 37
+)
+
+var (
+    flowPool = sync.Pool{
+        New: func() any {
+            return make([]byte, MaxFieldSize)
+        },
+    }
+    elemPool = sync.Pool{
+        New: func() any {
+            return make([]byte, MaxFieldSize)
+        },
+    }
 )
 
 type Task struct {
@@ -82,7 +98,12 @@ func (t *Task) Name() string {
 
 // ProcessPacket processes a single packet, creating or updating a flow in the correct shard.
 func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
-	flow, elem, err := t.generateFlowAndElem(packetInfo.FiveTuple)
+	flow := flowPool.Get().([]byte)[:t.flowSize]
+    elem := elemPool.Get().([]byte)[:t.elemSize]
+	defer flowPool.Put(flow)
+ 	defer elemPool.Put(elem)
+
+	err := t.generateFlowAndElem(flow, elem, packetInfo.FiveTuple)
 	if err != nil {
 		log.Printf("Error generating key for task '%s': %v\n", t.name, err)
 		return
@@ -104,17 +125,14 @@ func (t *Task) Reset() {
 }
 
 // generateFlowAndElem creates Flow and Element keys based on the configured fields.
-func (t *Task) generateFlowAndElem(ft model.FiveTuple) ([]byte, []byte, error) {
-	flow := make([]byte, t.flowSize)
-	elem := make([]byte, t.elemSize)
-
+func (t *Task) generateFlowAndElem(flow, elem []byte, ft model.FiveTuple) (error) {
 	writeBytes := func(buf []byte, offset int, field string) int {
 		switch field {
 		case "SrcIP":
-			copy(buf[offset:], ft.SrcIP.To16())
+			copy(buf[offset:], ft.SrcIP)
 			offset += IPv6ByteSize
 		case "DstIP":
-			copy(buf[offset:], ft.DstIP.To16())
+			copy(buf[offset:], ft.DstIP)
 			offset += IPv6ByteSize
 		case "SrcPort":
 			buf[offset] = byte(ft.SrcPort >> 8)
@@ -140,7 +158,7 @@ func (t *Task) generateFlowAndElem(ft model.FiveTuple) ([]byte, []byte, error) {
 		offset = writeBytes(elem, offset, f)
 	}
 
-	return flow, elem, nil
+	return nil
 }
 
 func fieldByteSize(field string) uint32 {
