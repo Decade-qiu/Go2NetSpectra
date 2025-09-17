@@ -22,8 +22,8 @@
 
 架构的基石是 `internal/model` 中定义的一系列核心接口：
 
-- **`model.Task`**: 定义了一个独立的、可插拔的聚合任务。它包含 `ProcessPacket` 用于处理数据包，`Snapshot` 用于提供当前聚合数据的只读快照，以及 `Reset` 用于清空内部状态以开始新的测量周期。任何实现了此接口的结构体，都可以被视为一个标准的计算单元，由 `Manager` 进行统一调度。
-- **`model.Writer`**: 定义了数据写入器的标准行为。它包含 `Write` 方法用于将数据持久化，以及 `GetInterval` 方法用于告知 `Manager` 其期望的快照频率。这使得聚合任务无需关心数据最终被写入到哪里（本地文件、数据库等），实现了计算与存储的彻底分离。
+- **`model.Task`**: 定义了一个独立的、可插拔的聚合任务。它包含 `ProcessPacket` 用于处理数据包，`Snapshot` 用于提供当前聚合数据的只读快照，以及 `Reset` 用于清空内部状态以开始新的测量周期。为了实现 `Task` 与 `Writer` 的深度解耦，`Task` 接口还新增了 `Fields()` 和 `DecodeFlowFunc()` 方法，允许 `Task` 向 `Writer` 暴露其流的构成和解码方式。
+- **`model.Writer`**: 定义了数据写入器的标准行为。它的 `Write` 方法现在接收来自 `Task` 的元信息（如任务名、字段列表、解码函数），使其能够处理来自不同类型 `Task` 的、格式各异的数据。`GetInterval` 方法则用于告知 `Manager` 其期望的快照频率。
 
 ### 2.2. 核心实现：三层解耦模型
 
@@ -45,7 +45,7 @@ graph TD
 
 - **数据接入层**: 对于 `ns-engine`，这是 `StreamAggregator`，它从 NATS 接收数据并放入 `Manager` 的输入通道。对于 `pcap-analyzer`，这是 `pcap.Reader`，它从文件读取数据并放入通道。
 - **并发调度层 (`Manager`)**: 引擎的“大脑”，负责并发调度和生命周期管理。它内部维护一个 **Worker Pool**，从输入通道消费数据，进行必要的类型转换，然后将数据扇出（Fan-out）给所有已注册的 `Task` 实例。
-- **业务执行层 (`Task`)**: 执行具体的聚合计算逻辑。每个 `Task` 都是一个独立的计算单元，例如 `exact` 负责精确统计，`sketch` 则实现了基于 Count-Min 的 Heavy Hitter 发现算法。
+- **业务执行层 (`Task`)**: 执行具体的聚合计算逻辑。每个 `Task` 都是一个独立的计算单元，例如 `exact` 任务负责精确统计，`sketch` 任务则负责概率统计（如 `Count-Min Sketch`）。
 
 ### 2.3. 性能与健壮性亮点
 
@@ -53,9 +53,7 @@ graph TD
 
 - **异步持久化探针**: `ns-probe` 在将数据包发布到 NATS 之前，可以选择性地将数据包**异步**写入本地文件。我们为此设计了一个 `persistent.Worker`，它内部维护一个带缓冲的 channel 和一个独立的协程池。`Publisher` 只需将数据包（原始 `gopacket.Packet` 或解析后的 `model.PacketInfo`）非阻塞地发送到 channel 中，独立的 worker 协程会负责处理磁盘 I/O。这种设计将磁盘写入的延迟与网络发布的主路径完全解耦，确保了持久化功能不会影响探针的抓包和发布性能。
 - **并发模型：Worker Pool + Channel**: `Manager` 内部启动一个可配置的 **Worker Pool** 并发地处理数据包，充分利用多核CPU资源。数据包通过 `channel` 在生产者和消费者（Worker）之间传递，实现了I/O与计算的并行。
-- **无锁并发：分片 (Sharding) 与原子操作**: 
-    - 在 `exact` 精确统计任务中，为了解决并发访问聚合 `map` 时的锁竞争问题，我们采用了 **分片（Sharding）** 的设计。通过对流的 Key 进行哈希，将不同流的更新压力分散到多个独立的、由独立锁保护的 `map` 中，显著提升了并发性能。
-    - 在 `sketch` 估算任务中，我们更进一步，在 `CountMin.Insert` 方法中为每个计数器（包数和字节数）的更新都实现了一个基于 **`atomic.CompareAndSwapUint32` (CAS)** 的无锁循环。这避免了 goroutine 的挂起和上下文切换，在高争用（high-contention）场景下，其性能远超互斥锁。
+- **无锁并发：分片 (Sharding)**: 在 `exact` 任务内部，为了解决并发访问聚合 `map` 时的锁竞争问题，我们采用了 **分片（Sharding）** 的设计。通过对流的 Key 进行哈希，将不同流的更新压力分散到多个独立的、由独立锁保护的 `map` 中，显著提升了并发性能。
 - **只读快照 (Read-Only Snapshot)**: `Task` 的 `Snapshot()` 方法现在严格执行**只读操作**。它会返回当前聚合数据的**深拷贝副本**，确保在数据写入过程中，聚合任务的内部状态不会被修改，从而避免了并发写入时的数据不一致问题。
 - **周期性重置 (Periodic Reset)**: `Manager` 引入了一个独立的 `resetter` 协程，根据全局配置的 `period` 定期触发所有 `Task` 的 `Reset()` 方法。`Reset()` 方法负责原子性地清空 `Task` 的内部聚合状态，为新的测量周期做准备。这种机制将数据读取（快照）和数据清零（重置）的职责彻底分离，保证了数据在每个测量周期内的完整性和准确性。
 - **灵活的写入器调度**: 每个 `Writer` 都可以独立配置其 `snapshot_interval`。`Manager` 会为每个启用的 `Writer` 启动一个独立的 `snapshotter` 协程，按照各自的 `snapshot_interval` 频率从 `Task` 获取只读快照并进行持久化。这使得不同数据目标可以有不同的写入频率，极大地提升了系统的灵活性。
@@ -65,7 +63,7 @@ graph TD
 
 为了实现真正的“可插拔”架构，我们结合了**工厂模式**与 Go 语言的**包初始化**机制。这使得添加一个新的聚合器类型无需修改任何核心引擎代码，只需遵循约定即可，极大地提升了项目的可维护性和扩展性。
 
-`Manager` 的创建过程由配置文件 `config.yaml` 驱动。管理员可以通过 `type` 字段（如 `type: exact`）来声明使用哪种聚合引擎。`manager.NewManager` 函数会通过一个中央工厂，动态地创建出该类型对应的所有 `Task` 实例和**预配置的 `Writer` 实例**。
+`Manager` 的创建过程由配置文件 `config.yaml` 驱动。管理员可以通过 `type` 字段（如 `exact` 或 `sketch`）来声明使用哪种聚合引擎。`manager.NewManager` 函数会通过一个中央工厂，动态地创建出该类型对应的所有 `Task` 实例和**预配置的 `Writer` 实例**。
 
 #### **如何实现一个新的聚合器？**
 
@@ -122,6 +120,7 @@ graph TD
     // internal/engine/manager/manager.go
     import (
         _ "Go2NetSpectra/internal/engine/impl/exact"
+        _ "Go2NetSpectra/internal/engine/impl/sketch"
         _ "Go2NetSpectra/internal/engine/impl/hll" // <-- 新增匿名导入
     )
     ```
@@ -279,7 +278,7 @@ Exact 实现
 
 ## 4. 应用场景与数据流
 
-### 3.1. 离线分析：`pcap-analyzer`
+### 4.1. 离线分析：`pcap-analyzer`
 
 此模式用于对 `.pcap` 文件进行深度分析，其数据流相对简单，所有处理都在单个进程内完成。
 
@@ -311,7 +310,7 @@ sequenceDiagram
     Analyzer-->>User: 处理完成, 程序退出
 ```
 
-### 3.2. 实时监控与查询
+### 4.2. 实时监控与查询
 
 这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理并写入 ClickHouse，`ns-api` 提供查询服务，最终由 Grafana 进行展示。
 

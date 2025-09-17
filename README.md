@@ -56,7 +56,7 @@ graph TD
 ```
 - **`ns-probe`**: A lightweight, high-performance probe that captures live traffic from a network interface. It parses packet metadata and publishes it to NATS. It can also be configured to persist raw packets locally for backup or replay.
 - **`pcap-analyzer`**: A command-line tool for offline analysis. It reads packets from `.pcap` files and feeds them directly into the core engine, bypassing the NATS pipeline.
-- **`ns-engine`**: The heart of the system. It subscribes to the data stream from NATS and orchestrates a pool of concurrent workers to process and aggregate the traffic data in real-time.
+- **`ns-engine`**: The heart of the system. It subscribes to the data stream from NATS and orchestrates a pool of concurrent workers to process and aggregate the traffic data in real-time using either exact counting or sketch algorithms (like Count-Min Sketch).
 - **`ns-api`**: A RESTful API server that provides query capabilities over the aggregated data stored in ClickHouse, offering endpoints for both high-level summaries and detailed flow tracing.
 - **Engine Core**: The shared brain of the system, featuring a `Manager` that schedules and a set of `Task` plugins that execute the actual aggregation logic.
 
