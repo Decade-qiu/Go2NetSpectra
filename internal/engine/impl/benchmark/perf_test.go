@@ -34,8 +34,8 @@ func BenchmarkAggregator(b *testing.B) {
 			Timestamp: pbPacket.Timestamp.AsTime(),
 			Length:    int(pbPacket.Length),
 			FiveTuple: model.FiveTuple{
-				SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp),
-				DstIP:    net.IP(pbPacket.FiveTuple.DstIp),
+				SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
+				DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
 				SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
 				DstPort:  uint16(pbPacket.FiveTuple.DstPort),
 				Protocol: uint8(pbPacket.FiveTuple.Protocol),
@@ -45,7 +45,7 @@ func BenchmarkAggregator(b *testing.B) {
 	}
 
 	b.Run("Sketch_Parallel", run_sketch_parallel)
-	b.Run("Exact_Parallel", run_exact_parallel)
+	// b.Run("Exact_Parallel", run_exact_parallel)
 
 	// run_sketch(b)
 	// run_exact(b)
@@ -54,7 +54,7 @@ func BenchmarkAggregator(b *testing.B) {
 func run_sketch_parallel(b *testing.B) {
 	Counthreshold := uint32(4096)
 	Sizethreshold := uint32(4096 * 1024)
-	task := sketch.New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<8, 2, Sizethreshold, Counthreshold)
+	task := sketch.New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<13, 2, Sizethreshold, Counthreshold)
 
 	b.Run("Insert_Sketch_Parallel", func(b *testing.B) {
 		b.ResetTimer()
