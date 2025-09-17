@@ -199,8 +199,8 @@ func (m *Manager) worker() {
 			Timestamp: pbPacket.Timestamp.AsTime(),
 			Length:    int(pbPacket.Length),
 			FiveTuple: model.FiveTuple{
-				SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp),
-				DstIP:    net.IP(pbPacket.FiveTuple.DstIp),
+				SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
+				DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
 				SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
 				DstPort:  uint16(pbPacket.FiveTuple.DstPort),
 				Protocol: uint8(pbPacket.FiveTuple.Protocol),
