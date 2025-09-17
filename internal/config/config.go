@@ -21,12 +21,18 @@ type GobConfig struct {
 	RootPath string `yaml:"root_path"`
 }
 
+// TextConfig holds the configuration for the text file writer.
+type TextConfig struct {
+	RootPath string `yaml:"root_path"`
+}
+
 // WriterDef defines a writer configuration.
 type WriterDef struct {
 	Type             string           `yaml:"type"`
 	Enabled          bool             `yaml:"enabled"`
 	SnapshotInterval string           `yaml:"snapshot_interval"`
 	Gob              GobConfig        `yaml:"gob"`
+	Text             TextConfig       `yaml:"text"`
 	ClickHouse       ClickHouseConfig `yaml:"clickhouse"`
 }
 
@@ -56,17 +62,18 @@ type SketchTaskDef struct {
 
 // SketchTaskDef defines a single task's parameters within the sketch aggregator group.
 type SketchAggregatorConfig struct {
+	Writers []WriterDef     `yaml:"writers"`
 	Tasks   []SketchTaskDef `yaml:"tasks"`
 }
 
 // AggregatorConfig holds the top-level aggregator settings.
 type AggregatorConfig struct {
-	Type                string                `yaml:"type"`
-	Period              string                `yaml:"period"`
-	NumWorkers          int                   `yaml:"num_workers"`
-	SizeOfPacketChannel int                   `yaml:"size_of_packet_channel"`
-	Exact               ExactAggregatorConfig `yaml:"exact"`
-	Sketch              SketchAggregatorConfig`yaml:"sketch"`
+	Type                string                 `yaml:"type"`
+	Period              string                 `yaml:"period"`
+	NumWorkers          int                    `yaml:"num_workers"`
+	SizeOfPacketChannel int                    `yaml:"size_of_packet_channel"`
+	Exact               ExactAggregatorConfig  `yaml:"exact"`
+	Sketch              SketchAggregatorConfig `yaml:"sketch"`
 }
 
 // PersistenceConfig holds the configuration for the probe's local persistence worker.
