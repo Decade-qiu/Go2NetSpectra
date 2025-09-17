@@ -5,23 +5,57 @@ import (
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
+	"encoding/binary"
 	"log"
+	"net"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 // --- Factory Registration ---
 
 func init() {
 	factory.RegisterAggregator("sketch", func(cfg *config.Config) ([]model.Task, []model.Writer, error) {
-		exactCfg := cfg.Aggregator.Sketch
+		sketchCfg := cfg.Aggregator.Sketch
 
 		// Create all enabled writers for this aggregator group
-		// No writers implemented yet
-		writers := make([]model.Writer, 0)
+		writers := make([]model.Writer, 0, len(sketchCfg.Writers))
+		for _, writerDef := range sketchCfg.Writers {
+			if !writerDef.Enabled {
+				continue
+			}
+
+			interval, err := time.ParseDuration(writerDef.SnapshotInterval)
+			if err != nil {
+				log.Printf("Warning: invalid snapshot_interval for writer type '%s': %v, skipping.", writerDef.Type, err)
+				continue
+			}
+
+			var writer model.Writer
+			switch writerDef.Type {
+			case "text":
+				writer = NewTextWriter(writerDef.Text.RootPath, interval)
+				log.Printf("Text writer created at %s", writerDef.Text.RootPath)
+			case "clickhouse":
+				writer, err = NewClickHouseWriter(writerDef.ClickHouse, interval)
+				if err != nil {
+					log.Printf("Warning: failed to create writer type '%s': %v, skipping.", writerDef.Type, err)
+					continue
+				} else {
+					log.Printf("ClickHouse writer created for database %s at %s:%d", writerDef.ClickHouse.Database, writerDef.ClickHouse.Host, writerDef.ClickHouse.Port)
+				}
+			default:
+				log.Printf("Warning: unknown writer type '%s' in sketch aggregator config, skipping.", writerDef.Type)
+				continue
+			}
+			writers = append(writers, writer)
+		}
 
 		// Create all tasks for this aggregator group
-		tasks := make([]model.Task, len(exactCfg.Tasks))
-		for i, taskCfg := range exactCfg.Tasks {
+		tasks := make([]model.Task, len(sketchCfg.Tasks))
+		for i, taskCfg := range sketchCfg.Tasks {
 			tasks[i] = New(taskCfg.Name, taskCfg.FlowFields, taskCfg.ElementFields, taskCfg.Width, taskCfg.Depth, taskCfg.SizeThereshold, taskCfg.CountThereshold)
 		}
 
@@ -96,6 +130,16 @@ func (t *Task) Name() string {
 	return t.name
 }
 
+// Fields 
+func (t *Task) Fields() []string {
+	return t.flowFields
+}
+
+// Func 
+func (t *Task) DecodeFlowFunc() func(flow []byte, fields []string) string {
+	return t.DecodeFlow
+}
+
 // ProcessPacket processes a single packet, creating or updating a flow in the correct shard.
 func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 	flow := flowPool.Get().([]byte)[:t.flowSize]
@@ -103,7 +147,7 @@ func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 	defer flowPool.Put(flow)
  	defer elemPool.Put(elem)
 
-	err := t.generateFlowAndElem(flow, elem, packetInfo.FiveTuple)
+	err := t.generateFlowAndElem(flow, elem, &packetInfo.FiveTuple)
 	if err != nil {
 		log.Printf("Error generating key for task '%s': %v\n", t.name, err)
 		return
@@ -126,40 +170,64 @@ func (t *Task) Reset() {
 }
 
 // generateFlowAndElem creates Flow and Element keys based on the configured fields.
-func (t *Task) generateFlowAndElem(flow, elem []byte, ft model.FiveTuple) (error) {
-	writeBytes := func(buf []byte, offset int, field string) int {
-		switch field {
-		case "SrcIP":
-			copy(buf[offset:], ft.SrcIP)
-			offset += IPv6ByteSize
-		case "DstIP":
-			copy(buf[offset:], ft.DstIP)
-			offset += IPv6ByteSize
-		case "SrcPort":
-			buf[offset] = byte(ft.SrcPort >> 8)
-			buf[offset+1] = byte(ft.SrcPort & 0xFF)
-			offset += PortByteSize
-		case "DstPort":
-			buf[offset] = byte(ft.DstPort >> 8)
-			buf[offset+1] = byte(ft.DstPort & 0xFF)
-			offset += PortByteSize
-		case "Protocol":
-			buf[offset] = byte(ft.Protocol)
-			offset += ProtoByteSize
-		}
-		return offset
-	}
-
+func (t *Task) generateFlowAndElem(flow, elem []byte, ft *model.FiveTuple) (error) {
 	offset := 0
 	for _, f := range t.flowFields {
-		offset = writeBytes(flow, offset, f)
+		offset = t.EncodeFlow(flow, offset, f, ft)
 	}
 	offset = 0
 	for _, f := range t.elementFields {
-		offset = writeBytes(elem, offset, f)
+		offset = t.EncodeFlow(elem, offset, f, ft)
 	}
 
 	return nil
+}
+
+func (t *Task) EncodeFlow(buf []byte, offset int, field string, ft *model.FiveTuple) int {
+	switch field {
+	case "SrcIP":
+		copy(buf[offset:], ft.SrcIP)
+		offset += IPv6ByteSize
+	case "DstIP":
+		copy(buf[offset:], ft.DstIP)
+		offset += IPv6ByteSize
+	case "SrcPort":
+		buf[offset] = byte(ft.SrcPort >> 8)
+		buf[offset+1] = byte(ft.SrcPort & 0xFF)
+		offset += PortByteSize
+	case "DstPort":
+		buf[offset] = byte(ft.DstPort >> 8)
+		buf[offset+1] = byte(ft.DstPort & 0xFF)
+		offset += PortByteSize
+	case "Protocol":
+		buf[offset] = byte(ft.Protocol)
+		offset += ProtoByteSize
+	}
+	return offset
+}
+
+func (t *Task) DecodeFlow(flow []byte, fields []string) string {
+    var parts []string
+    offset := 0
+
+    for _, f := range fields {
+        switch f {
+        case "SrcIP", "DstIP":
+            ip := net.IP(flow[offset : offset+IPv6ByteSize])
+            parts = append(parts, ip.String())
+            offset += IPv6ByteSize
+        case "SrcPort", "DstPort":
+            port := binary.BigEndian.Uint16(flow[offset : offset+PortByteSize])
+            parts = append(parts, strconv.Itoa(int(port)))
+            offset += PortByteSize
+        case "Protocol":
+            proto := uint8(flow[offset])
+            parts = append(parts, strconv.Itoa(int(proto)))
+            offset += ProtoByteSize
+        }
+    }
+
+    return strings.Join(parts, " ")
 }
 
 func fieldByteSize(field string) uint32 {
