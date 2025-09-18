@@ -70,7 +70,7 @@ func main() {
 	r.HandleFunc("/api/v1/flows/trace", apiHandler.traceFlowHandler).Methods("POST")
 
 	server := &http.Server{
-		Addr:    cfg.API.ListenAddr,
+		Addr:    cfg.API.HttpListenAddr,
 		Handler: r,
 	}
 
