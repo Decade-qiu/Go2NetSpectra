@@ -559,6 +559,170 @@ func (x *SearchTasksResponse) GetTaskNames() []string {
 	return nil
 }
 
+type HeavyHittersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskName      string                 `protobuf:"bytes,1,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
+	Type          int32                  `protobuf:"varint,2,opt,name=type,proto3" json:"type,omitempty"` // 0 for count, 1 for size
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeavyHittersRequest) Reset() {
+	*x = HeavyHittersRequest{}
+	mi := &file_v1_query_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeavyHittersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeavyHittersRequest) ProtoMessage() {}
+
+func (x *HeavyHittersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeavyHittersRequest.ProtoReflect.Descriptor instead.
+func (*HeavyHittersRequest) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *HeavyHittersRequest) GetTaskName() string {
+	if x != nil {
+		return x.TaskName
+	}
+	return ""
+}
+
+func (x *HeavyHittersRequest) GetType() int32 {
+	if x != nil {
+		return x.Type
+	}
+	return 0
+}
+
+func (x *HeavyHittersRequest) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+func (x *HeavyHittersRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type HeavyHitter struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Flow          string                 `protobuf:"bytes,1,opt,name=flow,proto3" json:"flow,omitempty"`
+	Value         uint64                 `protobuf:"varint,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeavyHitter) Reset() {
+	*x = HeavyHitter{}
+	mi := &file_v1_query_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeavyHitter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeavyHitter) ProtoMessage() {}
+
+func (x *HeavyHitter) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeavyHitter.ProtoReflect.Descriptor instead.
+func (*HeavyHitter) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *HeavyHitter) GetFlow() string {
+	if x != nil {
+		return x.Flow
+	}
+	return ""
+}
+
+func (x *HeavyHitter) GetValue() uint64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+type HeavyHittersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hitters       []*HeavyHitter         `protobuf:"bytes,1,rep,name=hitters,proto3" json:"hitters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeavyHittersResponse) Reset() {
+	*x = HeavyHittersResponse{}
+	mi := &file_v1_query_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeavyHittersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeavyHittersResponse) ProtoMessage() {}
+
+func (x *HeavyHittersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeavyHittersResponse.ProtoReflect.Descriptor instead.
+func (*HeavyHittersResponse) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *HeavyHittersResponse) GetHitters() []*HeavyHitter {
+	if x != nil {
+		return x.Hitters
+	}
+	return nil
+}
+
 var File_v1_query_proto protoreflect.FileDescriptor
 
 const file_v1_query_proto_rawDesc = "" +
@@ -603,12 +767,23 @@ const file_v1_query_proto_rawDesc = "" +
 	"\x12SearchTasksRequest\"4\n" +
 	"\x13SearchTasksResponse\x12\x1d\n" +
 	"\n" +
-	"task_names\x18\x01 \x03(\tR\ttaskNames2\x90\x02\n" +
+	"task_names\x18\x01 \x03(\tR\ttaskNames\"\x93\x01\n" +
+	"\x13HeavyHittersRequest\x12\x1b\n" +
+	"\ttask_name\x18\x01 \x01(\tR\btaskName\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\x05R\x04type\x125\n" +
+	"\bend_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\"7\n" +
+	"\vHeavyHitter\x12\x12\n" +
+	"\x04flow\x18\x01 \x01(\tR\x04flow\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x04R\x05value\"A\n" +
+	"\x14HeavyHittersResponse\x12)\n" +
+	"\ahitters\x18\x01 \x03(\v2\x0f.v1.HeavyHitterR\ahitters2\xd8\x02\n" +
 	"\fQueryService\x12>\n" +
 	"\vHealthCheck\x12\x16.v1.HealthCheckRequest\x1a\x17.v1.HealthCheckResponse\x12>\n" +
 	"\vSearchTasks\x12\x16.v1.SearchTasksRequest\x1a\x17.v1.SearchTasksResponse\x12F\n" +
 	"\x0eAggregateFlows\x12\x16.v1.AggregationRequest\x1a\x1c.v1.QueryTotalCountsResponse\x128\n" +
-	"\tTraceFlow\x12\x14.v1.TraceFlowRequest\x1a\x15.v1.TraceFlowResponseB\fZ\n" +
+	"\tTraceFlow\x12\x14.v1.TraceFlowRequest\x1a\x15.v1.TraceFlowResponse\x12F\n" +
+	"\x11QueryHeavyHitters\x12\x17.v1.HeavyHittersRequest\x1a\x18.v1.HeavyHittersResponseB\fZ\n" +
 	"api/gen/v1b\x06proto3"
 
 var (
@@ -623,7 +798,7 @@ func file_v1_query_proto_rawDescGZIP() []byte {
 	return file_v1_query_proto_rawDescData
 }
 
-var file_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_v1_query_proto_goTypes = []any{
 	(*AggregationRequest)(nil),       // 0: v1.AggregationRequest
 	(*TaskSummary)(nil),              // 1: v1.TaskSummary
@@ -635,30 +810,37 @@ var file_v1_query_proto_goTypes = []any{
 	(*HealthCheckResponse)(nil),      // 7: v1.HealthCheckResponse
 	(*SearchTasksRequest)(nil),       // 8: v1.SearchTasksRequest
 	(*SearchTasksResponse)(nil),      // 9: v1.SearchTasksResponse
-	nil,                              // 10: v1.TraceFlowRequest.FlowKeysEntry
-	(*timestamppb.Timestamp)(nil),    // 11: google.protobuf.Timestamp
+	(*HeavyHittersRequest)(nil),      // 10: v1.HeavyHittersRequest
+	(*HeavyHitter)(nil),              // 11: v1.HeavyHitter
+	(*HeavyHittersResponse)(nil),     // 12: v1.HeavyHittersResponse
+	nil,                              // 13: v1.TraceFlowRequest.FlowKeysEntry
+	(*timestamppb.Timestamp)(nil),    // 14: google.protobuf.Timestamp
 }
 var file_v1_query_proto_depIdxs = []int32{
-	11, // 0: v1.AggregationRequest.end_time:type_name -> google.protobuf.Timestamp
+	14, // 0: v1.AggregationRequest.end_time:type_name -> google.protobuf.Timestamp
 	1,  // 1: v1.QueryTotalCountsResponse.summaries:type_name -> v1.TaskSummary
-	10, // 2: v1.TraceFlowRequest.flow_keys:type_name -> v1.TraceFlowRequest.FlowKeysEntry
-	11, // 3: v1.TraceFlowRequest.end_time:type_name -> google.protobuf.Timestamp
-	11, // 4: v1.FlowLifecycle.first_seen:type_name -> google.protobuf.Timestamp
-	11, // 5: v1.FlowLifecycle.last_seen:type_name -> google.protobuf.Timestamp
+	13, // 2: v1.TraceFlowRequest.flow_keys:type_name -> v1.TraceFlowRequest.FlowKeysEntry
+	14, // 3: v1.TraceFlowRequest.end_time:type_name -> google.protobuf.Timestamp
+	14, // 4: v1.FlowLifecycle.first_seen:type_name -> google.protobuf.Timestamp
+	14, // 5: v1.FlowLifecycle.last_seen:type_name -> google.protobuf.Timestamp
 	4,  // 6: v1.TraceFlowResponse.lifecycle:type_name -> v1.FlowLifecycle
-	6,  // 7: v1.QueryService.HealthCheck:input_type -> v1.HealthCheckRequest
-	8,  // 8: v1.QueryService.SearchTasks:input_type -> v1.SearchTasksRequest
-	0,  // 9: v1.QueryService.AggregateFlows:input_type -> v1.AggregationRequest
-	3,  // 10: v1.QueryService.TraceFlow:input_type -> v1.TraceFlowRequest
-	7,  // 11: v1.QueryService.HealthCheck:output_type -> v1.HealthCheckResponse
-	9,  // 12: v1.QueryService.SearchTasks:output_type -> v1.SearchTasksResponse
-	2,  // 13: v1.QueryService.AggregateFlows:output_type -> v1.QueryTotalCountsResponse
-	5,  // 14: v1.QueryService.TraceFlow:output_type -> v1.TraceFlowResponse
-	11, // [11:15] is the sub-list for method output_type
-	7,  // [7:11] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	14, // 7: v1.HeavyHittersRequest.end_time:type_name -> google.protobuf.Timestamp
+	11, // 8: v1.HeavyHittersResponse.hitters:type_name -> v1.HeavyHitter
+	6,  // 9: v1.QueryService.HealthCheck:input_type -> v1.HealthCheckRequest
+	8,  // 10: v1.QueryService.SearchTasks:input_type -> v1.SearchTasksRequest
+	0,  // 11: v1.QueryService.AggregateFlows:input_type -> v1.AggregationRequest
+	3,  // 12: v1.QueryService.TraceFlow:input_type -> v1.TraceFlowRequest
+	10, // 13: v1.QueryService.QueryHeavyHitters:input_type -> v1.HeavyHittersRequest
+	7,  // 14: v1.QueryService.HealthCheck:output_type -> v1.HealthCheckResponse
+	9,  // 15: v1.QueryService.SearchTasks:output_type -> v1.SearchTasksResponse
+	2,  // 16: v1.QueryService.AggregateFlows:output_type -> v1.QueryTotalCountsResponse
+	5,  // 17: v1.QueryService.TraceFlow:output_type -> v1.TraceFlowResponse
+	12, // 18: v1.QueryService.QueryHeavyHitters:output_type -> v1.HeavyHittersResponse
+	14, // [14:19] is the sub-list for method output_type
+	9,  // [9:14] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_v1_query_proto_init() }
@@ -672,7 +854,7 @@ func file_v1_query_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_query_proto_rawDesc), len(file_v1_query_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

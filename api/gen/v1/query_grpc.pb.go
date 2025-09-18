@@ -20,10 +20,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	QueryService_HealthCheck_FullMethodName    = "/v1.QueryService/HealthCheck"
-	QueryService_SearchTasks_FullMethodName    = "/v1.QueryService/SearchTasks"
-	QueryService_AggregateFlows_FullMethodName = "/v1.QueryService/AggregateFlows"
-	QueryService_TraceFlow_FullMethodName      = "/v1.QueryService/TraceFlow"
+	QueryService_HealthCheck_FullMethodName       = "/v1.QueryService/HealthCheck"
+	QueryService_SearchTasks_FullMethodName       = "/v1.QueryService/SearchTasks"
+	QueryService_AggregateFlows_FullMethodName    = "/v1.QueryService/AggregateFlows"
+	QueryService_TraceFlow_FullMethodName         = "/v1.QueryService/TraceFlow"
+	QueryService_QueryHeavyHitters_FullMethodName = "/v1.QueryService/QueryHeavyHitters"
 )
 
 // QueryServiceClient is the client API for QueryService service.
@@ -34,6 +35,7 @@ type QueryServiceClient interface {
 	SearchTasks(ctx context.Context, in *SearchTasksRequest, opts ...grpc.CallOption) (*SearchTasksResponse, error)
 	AggregateFlows(ctx context.Context, in *AggregationRequest, opts ...grpc.CallOption) (*QueryTotalCountsResponse, error)
 	TraceFlow(ctx context.Context, in *TraceFlowRequest, opts ...grpc.CallOption) (*TraceFlowResponse, error)
+	QueryHeavyHitters(ctx context.Context, in *HeavyHittersRequest, opts ...grpc.CallOption) (*HeavyHittersResponse, error)
 }
 
 type queryServiceClient struct {
@@ -84,6 +86,16 @@ func (c *queryServiceClient) TraceFlow(ctx context.Context, in *TraceFlowRequest
 	return out, nil
 }
 
+func (c *queryServiceClient) QueryHeavyHitters(ctx context.Context, in *HeavyHittersRequest, opts ...grpc.CallOption) (*HeavyHittersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HeavyHittersResponse)
+	err := c.cc.Invoke(ctx, QueryService_QueryHeavyHitters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueryServiceServer is the server API for QueryService service.
 // All implementations must embed UnimplementedQueryServiceServer
 // for forward compatibility.
@@ -92,6 +104,7 @@ type QueryServiceServer interface {
 	SearchTasks(context.Context, *SearchTasksRequest) (*SearchTasksResponse, error)
 	AggregateFlows(context.Context, *AggregationRequest) (*QueryTotalCountsResponse, error)
 	TraceFlow(context.Context, *TraceFlowRequest) (*TraceFlowResponse, error)
+	QueryHeavyHitters(context.Context, *HeavyHittersRequest) (*HeavyHittersResponse, error)
 	mustEmbedUnimplementedQueryServiceServer()
 }
 
@@ -113,6 +126,9 @@ func (UnimplementedQueryServiceServer) AggregateFlows(context.Context, *Aggregat
 }
 func (UnimplementedQueryServiceServer) TraceFlow(context.Context, *TraceFlowRequest) (*TraceFlowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TraceFlow not implemented")
+}
+func (UnimplementedQueryServiceServer) QueryHeavyHitters(context.Context, *HeavyHittersRequest) (*HeavyHittersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryHeavyHitters not implemented")
 }
 func (UnimplementedQueryServiceServer) mustEmbedUnimplementedQueryServiceServer() {}
 func (UnimplementedQueryServiceServer) testEmbeddedByValue()                      {}
@@ -207,6 +223,24 @@ func _QueryService_TraceFlow_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QueryService_QueryHeavyHitters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeavyHittersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServiceServer).QueryHeavyHitters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueryService_QueryHeavyHitters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServiceServer).QueryHeavyHitters(ctx, req.(*HeavyHittersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // QueryService_ServiceDesc is the grpc.ServiceDesc for QueryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -229,6 +263,10 @@ var QueryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TraceFlow",
 			Handler:    _QueryService_TraceFlow_Handler,
+		},
+		{
+			MethodName: "QueryHeavyHitters",
+			Handler:    _QueryService_QueryHeavyHitters_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
