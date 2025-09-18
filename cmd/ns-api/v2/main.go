@@ -43,10 +43,12 @@ type QueryServiceServer struct {
 }
 
 func (s *QueryServiceServer) HealthCheck(ctx context.Context, req *v1.HealthCheckRequest) (*v1.HealthCheckResponse, error) {
+	log.Println("Received HealthCheck request")
 	return &v1.HealthCheckResponse{Status: "ok"}, nil
 }
 
 func (s *QueryServiceServer) SearchTasks(ctx context.Context, req *v1.SearchTasksRequest) (*v1.SearchTasksResponse, error) {
+	log.Println("Received SearchTasks request")
 	var taskNames []string
 	for _, task := range s.cfg.Aggregator.Exact.Tasks {
 		taskNames = append(taskNames, task.Name)
@@ -55,14 +57,21 @@ func (s *QueryServiceServer) SearchTasks(ctx context.Context, req *v1.SearchTask
 }
 
 func (s *QueryServiceServer) AggregateFlows(ctx context.Context, req *v1.AggregationRequest) (*v1.QueryTotalCountsResponse, error) {
+	log.Printf("Received AggregateFlows request for task: %s, end: %v", req.TaskName, req.EndTime)
 	return s.querier.AggregateFlows(ctx, req)
 }
 
 func (s *QueryServiceServer) TraceFlow(ctx context.Context, req *v1.TraceFlowRequest) (*v1.TraceFlowResponse, error) {
+	log.Printf("Received TraceFlow request for task: %s, flow: %v, end: %v", req.TaskName, req.FlowKeys, req.EndTime)
 	result, err := s.querier.TraceFlow(ctx, req)
 	var resultProto v1.TraceFlowResponse
 	resultProto.Lifecycle = result
 	return &resultProto, err
+}
+
+func (s *QueryServiceServer) QueryHeavyHitters(ctx context.Context, req *v1.HeavyHittersRequest) (*v1.HeavyHittersResponse, error) {
+	log.Printf("Received QueryHeavyHitters request for task: %s, type: %v, end: %v, limit: %d", req.TaskName, req.Type, req.EndTime, req.Limit)
+	return s.querier.QueryHeavyHitters(ctx, req)
 }
 
 func main() {
