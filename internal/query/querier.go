@@ -16,6 +16,7 @@ import (
 type Querier interface {
 	AggregateFlows(ctx context.Context, req *v1.AggregationRequest) (*v1.QueryTotalCountsResponse, error)
 	TraceFlow(ctx context.Context, req *v1.TraceFlowRequest) (*v1.FlowLifecycle, error)
+	QueryHeavyHitters(ctx context.Context, req *v1.HeavyHittersRequest) (*v1.HeavyHittersResponse, error)
 }
 
 // clickhouseQuerier implements the Querier interface for ClickHouse.
@@ -55,9 +56,62 @@ func connect(cfg config.ClickHouseConfig) (clickhouse.Conn, error) {
 	return conn, nil
 }
 
+// QueryHeavyHitters builds and executes a dynamic heavy hitters query.
+func (q *clickhouseQuerier) QueryHeavyHitters(ctx context.Context, req *v1.HeavyHittersRequest) (*v1.HeavyHittersResponse, error) {
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString(`
+		SELECT Flow, LatestValue
+		FROM (
+			SELECT
+				Flow,
+				argMax(Value, Timestamp) AS LatestValue
+			FROM heavy_hitters
+	`)
+
+	var whereClauses []string
+	args := []interface{}{}
+
+	whereClauses = append(whereClauses, "TaskName = ?")
+	args = append(args, req.TaskName)
+
+	whereClauses = append(whereClauses, "Type = ?")
+	args = append(args, req.Type)
+
+	if req.EndTime != nil {
+		whereClauses = append(whereClauses, "Timestamp <= ?")
+		args = append(args, req.EndTime.AsTime())
+	}
+
+	queryBuilder.WriteString(" WHERE " + strings.Join(whereClauses, " AND "))
+
+	queryBuilder.WriteString(`
+			GROUP BY Flow
+		)
+		ORDER BY LatestValue DESC
+		LIMIT ?
+	`)
+	args = append(args, req.Limit)
+
+	rows, err := q.conn.Query(ctx, queryBuilder.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute heavy hitters query: %w", err)
+	}
+	defer rows.Close()
+
+	var hitters []*v1.HeavyHitter
+	for rows.Next() {
+		var hitter v1.HeavyHitter
+		if err := rows.Scan(&hitter.Flow, &hitter.Value); err != nil {
+			return nil, fmt.Errorf("failed to scan heavy hitter row: %w", err)
+		}
+		hitters = append(hitters, &hitter)
+	}
+
+	return &v1.HeavyHittersResponse{Hitters: hitters}, nil
+}
+
 // AggregateFlows builds and executes a dynamic aggregation query.
 func (q *clickhouseQuerier) AggregateFlows(ctx context.Context, req *v1.AggregationRequest) (*v1.QueryTotalCountsResponse, error) {
-	// ... (implementation remains the same)
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString(`
 		SELECT
