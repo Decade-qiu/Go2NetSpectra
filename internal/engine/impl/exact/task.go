@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -216,7 +217,7 @@ func (t *Task) Query(flow []byte) uint64 {
 	for i, fieldName := range t.keyFields {
 		switch fieldName {
 		case "SrcIP", "DstIP":
-			val := string(flow[index : index+IPv6ByteSize])
+			val := net.IP(flow[index : index+IPv6ByteSize]).String()
 			parts[i] = val
 			index += IPv6ByteSize
 		case "SrcPort", "DstPort":
@@ -256,11 +257,11 @@ func (t *Task) generateKeyAndFields(ft model.FiveTuple) (map[string]interface{},
 	for i, fieldName := range t.keyFields {
 		switch fieldName {
 		case "SrcIP":
-			val := ft.SrcIP.To16().String()
+			val := ft.SrcIP.String()
 			parts[i] = val
 			fields[fieldName] = val
 		case "DstIP":
-			val := ft.DstIP.To16().String()
+			val := ft.DstIP.String()
 			parts[i] = val
 			fields[fieldName] = val
 		case "SrcPort":
