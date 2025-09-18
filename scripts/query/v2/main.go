@@ -11,15 +11,25 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func main() {
 	// Command-line flags
 	serverAddr := flag.String("addr", "localhost:50051", "The gRPC server address")
-	mode := flag.String("mode", "aggregate", "Query mode: 'aggregate' or 'trace'")
-	taskName := flag.String("task", "", "The name of the task to query (required for both modes)")
+	mode := flag.String("mode", "heavyhitters", "Query mode: 'aggregate', 'trace', or 'heavyhitters'")
+	taskName := flag.String("task", "", "The name of the task to query")
 	flowKey := flag.String("key", "", "The flow key for trace mode (e.g., \"SrcIP=1.2.3.4,DstPort=443\")")
+	hhType := flag.Int("type", 0, "Heavy hitter type (0 for count, 1 for size)")
+	limit := flag.Int("limit", 10, "Limit for heavy hitters query")
+	defaultEnd := time.Now().UTC().Add(8 * time.Hour).Format(time.RFC3339)
+	endTimeStr := flag.String("end", defaultEnd, "End time in RFC3339 format (e.g., 2025-09-12T15:10:00Z).")
+
 	flag.Parse()
+
+	if *taskName == "" && *mode != "aggregate" {
+		log.Fatal("Error: -task flag is required for this mode")
+	}
 
 	// Set up a connection to the server.
 	conn, err := grpc.NewClient(*serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -30,28 +40,32 @@ func main() {
 
 	client := v1.NewQueryServiceClient(conn)
 
-	// Contact the server and print out its response.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	switch *mode {
 	case "aggregate":
-		doAggregateQuery(ctx, client, *taskName)
+		doAggregateQuery(ctx, client, *taskName, *endTimeStr)
 	case "trace":
 		if *flowKey == "" {
 			log.Fatal("Error: -key flag is required for trace mode")
 		}
-		doTraceQuery(ctx, client, *taskName, *flowKey)
+		doTraceQuery(ctx, client, *taskName, *flowKey, *endTimeStr)
+	case "heavyhitters":
+		doHeavyHittersQuery(ctx, client, *taskName, *hhType, *limit, *endTimeStr)
 	default:
-		log.Fatalf("Unknown mode: %s. Use 'aggregate' or 'trace'", *mode)
+		log.Fatalf("Unknown mode: %s. Use 'aggregate', 'trace', or 'heavyhitters'", *mode)
 	}
 }
 
-func doAggregateQuery(ctx context.Context, client v1.QueryServiceClient, taskName string) {
+// doAggregateQuery performs an aggregation query.
+func doAggregateQuery(ctx context.Context, client v1.QueryServiceClient, taskName string, endTime string) {
 	log.Printf("Executing aggregation query for task: %s", taskName)
+	log.Printf("Query params - End time: %s", endTime)
 
 	req := &v1.AggregationRequest{
 		TaskName: taskName,
+		EndTime:  parseAndConvert(endTime),
 	}
 
 	resp, err := client.AggregateFlows(ctx, req)
@@ -73,8 +87,10 @@ func doAggregateQuery(ctx context.Context, client v1.QueryServiceClient, taskNam
 	log.Println("---------------------------")
 }
 
-func doTraceQuery(ctx context.Context, client v1.QueryServiceClient, taskName, flowKeyStr string) {
+// doTraceQuery performs a trace query.
+func doTraceQuery(ctx context.Context, client v1.QueryServiceClient, taskName, flowKeyStr string, endTime string) {
 	log.Printf("Executing trace query for task '%s' with key '%s'", taskName, flowKeyStr)
+	log.Printf("Query params - End time: %s", endTime)
 
 	flowKeys, err := parseFlowKeys(flowKeyStr)
 	if err != nil {
@@ -84,6 +100,7 @@ func doTraceQuery(ctx context.Context, client v1.QueryServiceClient, taskName, f
 	req := &v1.TraceFlowRequest{
 		TaskName: taskName,
 		FlowKeys: flowKeys,
+		EndTime:  parseAndConvert(endTime),
 	}
 
 	_resp, err := client.TraceFlow(ctx, req)
@@ -116,4 +133,45 @@ func parseFlowKeys(keyStr string) (map[string]string, error) {
 		keys[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
 	}
 	return keys, nil
+}
+
+// doHeavyHittersQuery performs a heavy hitters query.
+func doHeavyHittersQuery(ctx context.Context, client v1.QueryServiceClient, taskName string, hhType int, limit int, endTime string) {
+	log.Printf("Executing heavy hitters query for task: %s", taskName)
+	log.Printf("Heavy hitter type: %d, Limit: %d", hhType, limit)
+	log.Printf("Query params - End time: %s", endTime)
+
+	req := &v1.HeavyHittersRequest{
+		TaskName: taskName,
+		Type:     int32(hhType),
+		EndTime:  parseAndConvert(endTime),
+		Limit:    int32(limit),
+	}
+
+	resp, err := client.QueryHeavyHitters(ctx, req)
+	if err != nil {
+		log.Fatalf("could not perform heavy hitters query: %v", err)
+	}
+
+	log.Printf("--- Heavy Hitters Results for ---")
+	if len(resp.Hitters) == 0 {
+		log.Println("No data returned.")
+		return
+	}
+	log.Printf("% -4s | % -40s | %s", "Rank", "Flow", "Value")
+	log.Println(strings.Repeat("-", 60))
+	for i, hitter := range resp.Hitters {
+		log.Printf("% -4d | % -40s | %d", i+1, hitter.Flow, hitter.Value)
+	}
+	log.Println("-----------------------------")
+}
+
+func parseAndConvert(endTimeStr string) *timestamppb.Timestamp {
+	t, err := time.Parse(time.RFC3339, endTimeStr)
+	if err != nil {
+		log.Fatalf("Failed to parse time string: %v", err)
+		return nil
+	}
+	ts := timestamppb.New(t)
+	return ts
 }
