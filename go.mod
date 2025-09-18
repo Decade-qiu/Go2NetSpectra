@@ -12,6 +12,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+
 require (
 	github.com/ClickHouse/ch-go v0.67.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
