@@ -1,12 +1,13 @@
 # API Server settings
 api:
   # Address for the API server to listen on.
-  listen_addr: ":8080"
+  grpc_listen_addr: ":50051"
+  http_listen_addr: ":8080"
 
 # Configuration file for the network traffic aggregator system.
 aggregator:
   # Type of aggregator to use. Currently only "exact" is supported.
-  type: "sketch"
+  type: "exact"
   # The overall measurement period. At the end of each period, all task data is reset.
   # This should be longer than or equal to the longest writer snapshot_interval.
   period: "720h"

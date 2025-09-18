@@ -94,7 +94,8 @@ type ProbeConfig struct {
 
 // APIConfig holds the configuration for the API server.
 type APIConfig struct {
-	ListenAddr string `yaml:"listen_addr"`
+	GrpcListenAddr string `yaml:"grpc_listen_addr"`
+	HttpListenAddr string `yaml:"http_listen_addr"`
 }
 
 // Config is the top-level configuration struct for the entire application.
