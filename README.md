@@ -47,7 +47,7 @@ graph TD
 
     subgraph "Query Plane"
         API[ns-api] -- SQL --> Storage
-        User[User/Client] -- HTTP --> API
+        User[User/Client] -- gRPC --> API
     end
 
     style NATS fill:#FFB6C1,stroke:#333,stroke-width:2px
@@ -57,7 +57,7 @@ graph TD
 - **`ns-probe`**: A lightweight, high-performance probe that captures live traffic from a network interface. It parses packet metadata and publishes it to NATS. It can also be configured to persist raw packets locally for backup or replay.
 - **`pcap-analyzer`**: A command-line tool for offline analysis. It reads packets from `.pcap` files and feeds them directly into the core engine, bypassing the NATS pipeline.
 - **`ns-engine`**: The heart of the system. It subscribes to the data stream from NATS and orchestrates a pool of concurrent workers to process and aggregate the traffic data in real-time using either exact counting or sketch algorithms (like Count-Min Sketch).
-- **`ns-api`**: A RESTful API server that provides query capabilities over the aggregated data stored in ClickHouse, offering endpoints for both high-level summaries and detailed flow tracing.
+- **`ns-api`**: A high-performance **gRPC API server** that provides query capabilities over the aggregated data. It offers endpoints for exact aggregations, flow tracing, and heavy-hitter analysis from sketch tasks. It also exposes a limited HTTP endpoint for Grafana integration.
 - **Engine Core**: The shared brain of the system, featuring a `Manager` that schedules and a set of `Task` plugins that execute the actual aggregation logic.
 
 For a more detailed explanation of the architecture, configuration files (`config.yaml` vs `config.docker.yaml`), and how to run validation tests, see [`doc/technology.md`](doc/technology.md) and [`doc/build.md`](doc/build.md).
@@ -80,8 +80,14 @@ This guide provides two primary ways to run the project. Choose the one that bes
 
 This step is only required once, or whenever you modify a `.proto` file in the `api/proto/v1/` directory.
 ```sh
+# Install Go plugins for protoc
 go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
-protoc --proto_path=api/proto --go_out=. api/proto/v1/*.proto
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
+
+# Generate Go code
+protoc --proto_path=api/proto \
+       --go_out=. --go-grpc_out=. \
+       api/proto/v1/*.proto
 ```
 
 ---
@@ -122,10 +128,14 @@ sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 
 **Step 4: Query the API**
 
-Open a **third terminal** and use the query script to interact with the `ns-api` container.
+Open a **third terminal** and use the new **v2 query script** to interact with the `ns-api` gRPC service.
 
 ```sh
-go run ./scripts/query/main.go -mode=aggregate -task=per_src_ip
+# Example: Query for aggregated flows
+go run ./scripts/query/v2/main.go --mode=aggregate --task=per_src_ip
+
+# Example: Query for heavy hitters detected by a sketch task
+go run ./scripts/query/v2/main.go --mode=heavyhitters --task=per_src_ip --type=0 --limit=10
 ```
 
 ---
@@ -165,7 +175,8 @@ aggregator:
           # ...
 
 api:
-  listen_addr: ":8080"
+  grpc_listen_addr: ":50051"
+  http_listen_addr: ":8080"
 ```
 
 **Step 3: Run Go Applications Locally**
@@ -176,8 +187,8 @@ Open a separate terminal for each command.
 # Terminal 3: Start the Engine
 go run ./cmd/ns-engine/main.go
 
-# Terminal 4: Start the API Server
-go run ./cmd/ns-api/main.go
+# Terminal 4: Start the API Server (v2)
+go run ./cmd/ns-api/v2/main.go
 
 # Terminal 5: Start the Probe
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>

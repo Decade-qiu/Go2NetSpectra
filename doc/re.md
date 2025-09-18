@@ -43,7 +43,7 @@ Go2NetSpectra 是一个基于 Go 语言构建的、支持分布式的、高性�
 
 **2.4. API 与应用模块 (`ns-api`)**
 
-  * **FR-15**: 提供一套 RESTful 或 GraphQL API，用于数据查询。
+  * **FR-15**: 提供一套 **gRPC API** 用于高性能数据查询，并为 Grafana 等 Web UI 提供兼容的 JSON HTTP 端点。
   * **FR-16**: API 必须支持按时间范围、一个或多个维度（IP, 端口, 协议等）进行组合查询和过滤。
   * **FR-17**: 提供管理接口，用于配置采集规则和告警阈值。
   * **FR-18**: 支持配置告警规则，并在触发时通过 Webhook 等方式发送通知。
@@ -104,8 +104,8 @@ Go2NetSpectra 是一个基于 Go 语言构建的、支持分布式的、高性�
 
   * **目标**: 提供数据查询能力，并使系统易于部署和观察。
   * **核心交付物**:
-      * **双模式查询 API**: `ns-api` 服务现在提供两种查询能力：聚合查询 (`/api/v1/aggregate`) 和流追溯查询 (`/api/v1/flows/trace`)。
-      * **Grafana 集成**: `ns-api` 实现了作为 Grafana JSON API 数据源所需的 `/`, `/search`, `/query` 端点。
+      * **gRPC 核心 API**: `ns-api` 服务已升级为 gRPC 优先。提供了 `AggregateFlows`, `TraceFlow`, `QueryHeavyHitters` 等多个高性能查询接口。
+      * **Grafana 兼容端点**: `ns-api` 保留了 HTTP 端点，专门用于与 Grafana 的 JSON API 数据源进行集成。
       * **容器化部署**: 提供了 `docker-compose.yml`，可以一键启动包括 `nats`, `clickhouse`, `ns-engine`, `ns-api`, 和 `grafana` 在内的完整后端服务。
       * **预置仪表盘**: 提供了一个基础的 Grafana 仪表盘，用于展示核心流量指标。
 

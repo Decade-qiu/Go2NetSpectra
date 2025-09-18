@@ -33,16 +33,19 @@
 如果您尚未安装 `protoc` 的 Go 语言插件，请运行以下命令：
 ```sh
 go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 ```
 
 **第二步：生成代码**
 
 在项目根目录下，执行以下命令来生成所有 `.proto` 文件：
 ```sh
-protoc --proto_path=api/proto --go_out=. api/proto/v1/*.proto
+protoc --proto_path=api/proto \
+       --go_out=. --go-grpc_out=. \
+       api/proto/v1/*.proto
 ```
 
-命令成功后，会在 `api/gen/v1/` 目录下生成或更新对应的 `.pb.go` 文件。
+命令成功后，会在 `api/gen/v1/` 目录下生成或更新对应的 `.pb.go` 和 `_grpc.pb.go` 文件。
 
 ---
 
@@ -68,8 +71,8 @@ docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=123 --name some
 # 终端 3: 启动引擎
 go run ./cmd/ns-engine/main.go
 
-# 终端 4: 启动 API 服务
-go run ./cmd/ns-api/main.go
+# 终端 4: 启动 API 服务 (v2 gRPC Server)
+go run ./cmd/ns-api/v2/main.go
 
 # 终端 5: 启动探针
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
@@ -105,9 +108,13 @@ docker compose up --build
     sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
     ```
 
-*   **使用查询脚本**: 在另一个新终端中，使用脚本与 `ns-api` 交互。
+*   **使用查询脚本**: 在另一个新终端中，使用 **v2 脚本** 与 `ns-api` 的 gRPC 服务交互。
     ```sh
-    go run ./scripts/query/main.go -mode=aggregate
+    # 查询聚合流
+    go run ./scripts/query/v2/main.go --mode=aggregate --task=per_src_ip
+
+    # 查询大流 (heavy hitters)
+    go run ./scripts/query/v2/main.go --mode=heavyhitters --task=per_src_ip --type=0 --limit=10
     ```
 
 ---
@@ -132,7 +139,7 @@ go test -bench=. ./internal/engine/impl/benchmark/
 
 ### 5.1. 查询脚本
 
-项目在 `scripts/query/` 目录下提供了一个多功能查询工具，支持多种模式和参数。详情请运行 `go run ./scripts/query/main.go --help`。
+项目在 `scripts/query/v2/` 目录下提供了一个多功能 gRPC 查询工具，支持多种模式和参数。详情请运行 `go run ./scripts/query/v2/main.go --help`。
 
 ### 5.2. Gob 解码器
 

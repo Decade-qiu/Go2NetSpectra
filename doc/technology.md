@@ -11,6 +11,7 @@
 | **配置管理** | **YAML** | **兼具人类可读性与结构化能力**。相比JSON，YAML 格式的配置文件对人类更加友好，更易于阅读和手动编辑。它能清晰地表达复杂的配置结构，使得系统行为的调整无需重新编译代码。 |
 | **消息队列** | **NATS** | **轻量、高性能、易于部署**。在实时处理流水线中，我们选择 NATS 作为核心的消息总线。它提供了优秀的解耦能力和水平扩展潜力，同时其简洁的设计和极低的延迟非常适合用作网络遥测数据的传输通道。|
 | **数据序列化** | **Protobuf** | **高效、兼容、格式严格**。所有在 NATS 中传输的消息都使用 Protobuf 进行序列化。相比 JSON，Protobuf 提供了更高效的编码效率和更严格的格式校验，是构建高性能数据管道的理想选择。|
+| **查询接口** | **gRPC** | **高性能、跨语言的远程调用**。我们选择 gRPC 作为核心的 API 技术。它基于 HTTP/2，使用 Protobuf 进行序列化，性能远超传统的 REST+JSON。其严格的接口定义（IDL）使得 API 的演进和跨语言客户端的生成变得简单可靠。|
 
 ---
 
@@ -312,38 +313,34 @@ sequenceDiagram
 
 ### 4.2. 实时监控与查询
 
-这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理并写入 ClickHouse，`ns-api` 提供查询服务，最终由 Grafana 进行展示。
+这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理并写入 ClickHouse，`ns-api` 提供 **gRPC** 查询服务，最终由 Grafana 或其他客户端进行消费。
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
+    participant User as gRPC 客户端
     participant Probe as ns-probe
     participant NATS as NATS服务器
     participant Engine as ns-engine
     participant ClickHouse as ClickHouse数据库
-    participant API as ns-api
+    participant API as ns-api (gRPC + HTTP)
     participant Grafana as Grafana
 
-    User->>Probe: 启动探针
     Probe->>NATS: Publish(PacketInfo)
-
-    User->>Engine: 启动引擎
     Engine->>NATS: Subscribe(PacketInfo)
     loop 定时快照
         Engine->>ClickHouse: 批量写入聚合数据
     end
 
-    User->>API: 启动API服务
-    API->>ClickHouse: 连接数据库
-
-    User->>Grafana: 访问仪表盘
-    Grafana->>API: 调用 /search 获取指标
-    API-->>Grafana: 返回 Task 列表
-    Grafana->>API: 调用 /query 查询数据
+    User->>API: gRPC: AggregateFlows()
+    User->>API: gRPC: QueryHeavyHitters()
     API->>ClickHouse: 执行 SQL 查询
     ClickHouse-->>API: 返回查询结果
-    API-->>Grafana: 返回时间序列数据
-    Grafana-->>User: 渲染图表
+    API-->>User: 返回 Protobuf 响应
+
+    Grafana->>API: HTTP: /query
+    API->>ClickHouse: (内部调用) 执行 SQL 查询
+    ClickHouse-->>API: 返回查询结果
+    API-->>Grafana: 返回 JSON 时间序列
 ```
 
 ---
