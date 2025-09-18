@@ -355,6 +355,210 @@ func (x *FlowLifecycle) GetTotalBytes() uint64 {
 	return 0
 }
 
+type TraceFlowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lifecycle     *FlowLifecycle         `protobuf:"bytes,1,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TraceFlowResponse) Reset() {
+	*x = TraceFlowResponse{}
+	mi := &file_v1_query_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TraceFlowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TraceFlowResponse) ProtoMessage() {}
+
+func (x *TraceFlowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TraceFlowResponse.ProtoReflect.Descriptor instead.
+func (*TraceFlowResponse) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *TraceFlowResponse) GetLifecycle() *FlowLifecycle {
+	if x != nil {
+		return x.Lifecycle
+	}
+	return nil
+}
+
+type HealthCheckRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HealthCheckRequest) Reset() {
+	*x = HealthCheckRequest{}
+	mi := &file_v1_query_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HealthCheckRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HealthCheckRequest) ProtoMessage() {}
+
+func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HealthCheckRequest.ProtoReflect.Descriptor instead.
+func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{6}
+}
+
+type HealthCheckResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // e.g. "ok"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HealthCheckResponse) Reset() {
+	*x = HealthCheckResponse{}
+	mi := &file_v1_query_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HealthCheckResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HealthCheckResponse) ProtoMessage() {}
+
+func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
+func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *HealthCheckResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type SearchTasksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchTasksRequest) Reset() {
+	*x = SearchTasksRequest{}
+	mi := &file_v1_query_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchTasksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchTasksRequest) ProtoMessage() {}
+
+func (x *SearchTasksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchTasksRequest.ProtoReflect.Descriptor instead.
+func (*SearchTasksRequest) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{8}
+}
+
+type SearchTasksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskNames     []string               `protobuf:"bytes,1,rep,name=task_names,json=taskNames,proto3" json:"task_names,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchTasksResponse) Reset() {
+	*x = SearchTasksResponse{}
+	mi := &file_v1_query_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchTasksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchTasksResponse) ProtoMessage() {}
+
+func (x *SearchTasksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_query_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchTasksResponse.ProtoReflect.Descriptor instead.
+func (*SearchTasksResponse) Descriptor() ([]byte, []int) {
+	return file_v1_query_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SearchTasksResponse) GetTaskNames() []string {
+	if x != nil {
+		return x.TaskNames
+	}
+	return nil
+}
+
 var File_v1_query_proto protoreflect.FileDescriptor
 
 const file_v1_query_proto_rawDesc = "" +
@@ -390,7 +594,21 @@ const file_v1_query_proto_rawDesc = "" +
 	"\tlast_seen\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen\x12#\n" +
 	"\rtotal_packets\x18\x03 \x01(\x04R\ftotalPackets\x12\x1f\n" +
 	"\vtotal_bytes\x18\x04 \x01(\x04R\n" +
-	"totalBytesB\fZ\n" +
+	"totalBytes\"D\n" +
+	"\x11TraceFlowResponse\x12/\n" +
+	"\tlifecycle\x18\x01 \x01(\v2\x11.v1.FlowLifecycleR\tlifecycle\"\x14\n" +
+	"\x12HealthCheckRequest\"-\n" +
+	"\x13HealthCheckResponse\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\x14\n" +
+	"\x12SearchTasksRequest\"4\n" +
+	"\x13SearchTasksResponse\x12\x1d\n" +
+	"\n" +
+	"task_names\x18\x01 \x03(\tR\ttaskNames2\x90\x02\n" +
+	"\fQueryService\x12>\n" +
+	"\vHealthCheck\x12\x16.v1.HealthCheckRequest\x1a\x17.v1.HealthCheckResponse\x12>\n" +
+	"\vSearchTasks\x12\x16.v1.SearchTasksRequest\x1a\x17.v1.SearchTasksResponse\x12F\n" +
+	"\x0eAggregateFlows\x12\x16.v1.AggregationRequest\x1a\x1c.v1.QueryTotalCountsResponse\x128\n" +
+	"\tTraceFlow\x12\x14.v1.TraceFlowRequest\x1a\x15.v1.TraceFlowResponseB\fZ\n" +
 	"api/gen/v1b\x06proto3"
 
 var (
@@ -405,28 +623,42 @@ func file_v1_query_proto_rawDescGZIP() []byte {
 	return file_v1_query_proto_rawDescData
 }
 
-var file_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_v1_query_proto_goTypes = []any{
 	(*AggregationRequest)(nil),       // 0: v1.AggregationRequest
 	(*TaskSummary)(nil),              // 1: v1.TaskSummary
 	(*QueryTotalCountsResponse)(nil), // 2: v1.QueryTotalCountsResponse
 	(*TraceFlowRequest)(nil),         // 3: v1.TraceFlowRequest
 	(*FlowLifecycle)(nil),            // 4: v1.FlowLifecycle
-	nil,                              // 5: v1.TraceFlowRequest.FlowKeysEntry
-	(*timestamppb.Timestamp)(nil),    // 6: google.protobuf.Timestamp
+	(*TraceFlowResponse)(nil),        // 5: v1.TraceFlowResponse
+	(*HealthCheckRequest)(nil),       // 6: v1.HealthCheckRequest
+	(*HealthCheckResponse)(nil),      // 7: v1.HealthCheckResponse
+	(*SearchTasksRequest)(nil),       // 8: v1.SearchTasksRequest
+	(*SearchTasksResponse)(nil),      // 9: v1.SearchTasksResponse
+	nil,                              // 10: v1.TraceFlowRequest.FlowKeysEntry
+	(*timestamppb.Timestamp)(nil),    // 11: google.protobuf.Timestamp
 }
 var file_v1_query_proto_depIdxs = []int32{
-	6, // 0: v1.AggregationRequest.end_time:type_name -> google.protobuf.Timestamp
-	1, // 1: v1.QueryTotalCountsResponse.summaries:type_name -> v1.TaskSummary
-	5, // 2: v1.TraceFlowRequest.flow_keys:type_name -> v1.TraceFlowRequest.FlowKeysEntry
-	6, // 3: v1.TraceFlowRequest.end_time:type_name -> google.protobuf.Timestamp
-	6, // 4: v1.FlowLifecycle.first_seen:type_name -> google.protobuf.Timestamp
-	6, // 5: v1.FlowLifecycle.last_seen:type_name -> google.protobuf.Timestamp
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	11, // 0: v1.AggregationRequest.end_time:type_name -> google.protobuf.Timestamp
+	1,  // 1: v1.QueryTotalCountsResponse.summaries:type_name -> v1.TaskSummary
+	10, // 2: v1.TraceFlowRequest.flow_keys:type_name -> v1.TraceFlowRequest.FlowKeysEntry
+	11, // 3: v1.TraceFlowRequest.end_time:type_name -> google.protobuf.Timestamp
+	11, // 4: v1.FlowLifecycle.first_seen:type_name -> google.protobuf.Timestamp
+	11, // 5: v1.FlowLifecycle.last_seen:type_name -> google.protobuf.Timestamp
+	4,  // 6: v1.TraceFlowResponse.lifecycle:type_name -> v1.FlowLifecycle
+	6,  // 7: v1.QueryService.HealthCheck:input_type -> v1.HealthCheckRequest
+	8,  // 8: v1.QueryService.SearchTasks:input_type -> v1.SearchTasksRequest
+	0,  // 9: v1.QueryService.AggregateFlows:input_type -> v1.AggregationRequest
+	3,  // 10: v1.QueryService.TraceFlow:input_type -> v1.TraceFlowRequest
+	7,  // 11: v1.QueryService.HealthCheck:output_type -> v1.HealthCheckResponse
+	9,  // 12: v1.QueryService.SearchTasks:output_type -> v1.SearchTasksResponse
+	2,  // 13: v1.QueryService.AggregateFlows:output_type -> v1.QueryTotalCountsResponse
+	5,  // 14: v1.QueryService.TraceFlow:output_type -> v1.TraceFlowResponse
+	11, // [11:15] is the sub-list for method output_type
+	7,  // [7:11] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_v1_query_proto_init() }
@@ -440,9 +672,9 @@ func file_v1_query_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_query_proto_rawDesc), len(file_v1_query_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   11,
 			NumExtensions: 0,
-			NumServices:   0,
+			NumServices:   1,
 		},
 		GoTypes:           file_v1_query_proto_goTypes,
 		DependencyIndexes: file_v1_query_proto_depIdxs,

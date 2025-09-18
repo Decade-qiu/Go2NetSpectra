@@ -45,3 +45,32 @@ message FlowLifecycle {
   uint64 total_packets = 3;
   uint64 total_bytes = 4;
 }
+
+message TraceFlowResponse {
+  FlowLifecycle lifecycle = 1;
+}
+
+// --- Health Check ---
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1; // e.g. "ok"
+}
+
+// --- Task Search ---
+
+message SearchTasksRequest {}
+
+message SearchTasksResponse {
+  repeated string task_names = 1;
+}
+
+// --- Query Service Definition ---
+
+service QueryService {
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc SearchTasks(SearchTasksRequest) returns (SearchTasksResponse);
+  rpc AggregateFlows(AggregationRequest) returns (QueryTotalCountsResponse);
+  rpc TraceFlow(TraceFlowRequest) returns (TraceFlowResponse);
+}
