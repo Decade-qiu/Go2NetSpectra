@@ -2,6 +2,7 @@ package sketch
 
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
+	"Go2NetSpectra/internal/engine/impl/exact"
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/pkg/pcap"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"reflect"
 	"sync"
 	"testing"
 )
@@ -29,10 +31,9 @@ func TestMultiProcess(t *testing.T) {
 	SizeThreshold := uint32(4096 * 1024)
 
 	// Initialize CountMin sketch
-	task := New("per_src_flow",
-		[]string{"SrcIP"},
-		[]string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		1<<15, 2, SizeThreshold, CountThreshold)
+	// task := New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<15, 2, SizeThreshold, CountThreshold)
+
+	task := exact.New("exact_per_src", []string{"SrcIP"}, 64)
 
 	// Ground truth (map-based)
 	countMap := make(map[string]int)
@@ -133,7 +134,15 @@ func TestMultiProcess(t *testing.T) {
 	// ---------------------------
 	// Heavy Hitters (Count + Size)
 	// ---------------------------
-	res := task.Snapshot().(statistic.HeavyRecord)
+	hhs := task.Snapshot()
+	if reflect.TypeOf(hhs) != reflect.TypeOf(statistic.HeavyRecord{}) {
+		log.Fatalf("Unexpected type: %v", reflect.TypeOf(hhs))
+	}
+	if hhs == nil {
+		log.Println("No heavy hitters detected.")
+		return
+	}
+	res := hhs.(statistic.HeavyRecord)
 
 	// Ground truth Count heavy hitters
 	trueCountHH := make(map[string]int)
