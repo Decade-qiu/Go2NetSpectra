@@ -2,6 +2,7 @@ package sketch
 
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
+	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/pkg/pcap"
@@ -26,14 +27,21 @@ func TestCountMin(t *testing.T) {
 
 	packetChannel := make(chan *v1.PacketInfo, 10000)
 
+	// Initialize CountMin sketch
 	Counthreshold := uint32(4096)
 	Sizethreshold := uint32(4096 * 1024)
+	cfg := config.SketchTaskDef{
+		Name:            "per_src_flow",
+		SktType:         0,
+		FlowFields:      []string{"SrcIP"},
+		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:           1 << 13,
+		Depth:           2,
+		SizeThereshold:  Sizethreshold,
+		CountThereshold: Counthreshold,
+	}
 
-	// Initialize CountMin sketch
-	task := New("per_src_flow",
-		[]string{"SrcIP"},
-		[]string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		1<<13, 2, Sizethreshold, Counthreshold)
+	task := New(cfg)
 
 	// Ground truth (map-based)
 	countMap := make(map[string]int)
@@ -47,8 +55,8 @@ func TestCountMin(t *testing.T) {
 				Timestamp: pbPacket.Timestamp.AsTime(),
 				Length:    int(pbPacket.Length),
 				FiveTuple: model.FiveTuple{
-					SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp),
-					DstIP:    net.IP(pbPacket.FiveTuple.DstIp),
+					SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
+					DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
 					SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
 					DstPort:  uint16(pbPacket.FiveTuple.DstPort),
 					Protocol: uint8(pbPacket.FiveTuple.Protocol),
@@ -108,9 +116,8 @@ func TestCountMin(t *testing.T) {
 			sizeRelErrSum += sizeRE
 		}
 
-		_, err := writer.WriteString(
-			fmt.Sprintf("%s count=%d est=%d size=%d est=%d\n",
-				key, actualCount, estimatedCount, actualSize, estimatedSize))
+		_, err := fmt.Fprintf(writer, "%s %d %d %d %d\n",
+	key, actualCount, estimatedCount, actualSize, estimatedSize)
 		if err != nil {
 			log.Fatalf("Failed to write: %v", err)
 		}
