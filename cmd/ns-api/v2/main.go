@@ -82,10 +82,19 @@ func main() {
 	}
 
 	var chCfg *config.ClickHouseConfig
-	for _, writerDef := range cfg.Aggregator.Exact.Writers {
-		if writerDef.Enabled && writerDef.Type == "clickhouse" {
-			chCfg = &writerDef.ClickHouse
-			break
+	if cfg.Aggregator.Type == "exact" {
+		for _, writerDef := range cfg.Aggregator.Exact.Writers {
+			if writerDef.Enabled && writerDef.Type == "clickhouse" {
+				chCfg = &writerDef.ClickHouse
+				break
+			}
+		}
+	} else if cfg.Aggregator.Type == "sketch" {
+		for _, writerDef := range cfg.Aggregator.Sketch.Writers {
+			if writerDef.Enabled && writerDef.Type == "clickhouse" {
+				chCfg = &writerDef.ClickHouse
+				break
+			}
 		}
 	}
 
