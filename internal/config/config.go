@@ -52,13 +52,19 @@ type ExactAggregatorConfig struct {
 
 // SketchTaskDef defines a single task's parameters within the sketch aggregator group.
 type SketchTaskDef struct {
-	Name      string   `yaml:"name"`
-	FlowFields []string `yaml:"flow_fields"`
-	ElementFields []string `yaml:"element_fields"`
-	Width    uint32   `yaml:"width"`
-	Depth    uint32   `yaml:"depth"`
-	SizeThereshold     uint32   `yaml:"size_thereshold"`
-	CountThereshold     uint32   `yaml:"count_thereshold"`
+	Name            string   `yaml:"name"`
+	SktType         uint8    `yaml:"skt_type"` // 0 for CountMin, 1 for SuperSpread
+	FlowFields      []string `yaml:"flow_fields"`
+	ElementFields   []string `yaml:"element_fields"`
+	Width           uint32   `yaml:"width"`
+	Depth           uint32   `yaml:"depth"`
+	SizeThereshold  uint32   `yaml:"size_thereshold"`
+	CountThereshold uint32   `yaml:"count_thereshold"`
+	// SuperSpread specific parameters
+	M    uint32  `yaml:"m"`
+	Size uint32  `yaml:"size"`
+	Base float64 `yaml:"base"`
+	B    float64 `yaml:"b"`
 }
 
 // SketchTaskDef defines a single task's parameters within the sketch aggregator group.

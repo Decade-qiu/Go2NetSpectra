@@ -56,7 +56,7 @@ func init() {
 		// Create all tasks for this aggregator group
 		tasks := make([]model.Task, len(sketchCfg.Tasks))
 		for i, taskCfg := range sketchCfg.Tasks {
-			tasks[i] = New(taskCfg.Name, taskCfg.FlowFields, taskCfg.ElementFields, taskCfg.Width, taskCfg.Depth, taskCfg.SizeThereshold, taskCfg.CountThereshold)
+			tasks[i] = New(taskCfg)
 		}
 
 		return tasks, writers, nil
@@ -101,27 +101,38 @@ type Task struct {
 	sketch   statistic.Sketch
 }
 
-// New creates a new Sketch task with the given name, flow fields, and element fields.
-func New(name string, flowFields, elementFields []string, w, d, st, ct uint32) model.Task {
+// New creates a new Sketch task based on the provided configuration.
+func New(cfg config.SketchTaskDef) model.Task {
 	flowSize := uint32(0)
-	for _, f := range flowFields {
+	for _, f := range cfg.FlowFields {
 		flowSize += fieldByteSize(f)
 	}
 	elemSize := uint32(0)
-	for _, f := range elementFields {
+	for _, f := range cfg.ElementFields {
 		elemSize += fieldByteSize(f)
 	}
 
-	log.Printf("Creating Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d) with width %d, depth %d, size_thereshold %d, count_thereshold %d\n",
-		name, flowFields, flowSize, elementFields, elemSize, w, d, st, ct)
+	var sketchImpl statistic.Sketch
+	switch cfg.SktType {
+	case 0: // CountMin
+		log.Printf("Creating CountMin Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d) with width %d, depth %d, size_thereshold %d, count_thereshold %d\n",
+			cfg.Name, cfg.FlowFields, flowSize, cfg.ElementFields, elemSize, cfg.Width, cfg.Depth, cfg.SizeThereshold, cfg.CountThereshold)
+		sketchImpl = statistic.NewCountMin(cfg.Width, cfg.Depth, cfg.SizeThereshold, cfg.CountThereshold, flowSize)
+	case 1: // SuperSpread
+		log.Printf("Creating SuperSpread Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d) with width %d, depth %d, threshold %d, m %d, size %d, base %.2f, b %.2f\n",
+			cfg.Name, cfg.FlowFields, flowSize, cfg.ElementFields, elemSize, cfg.Width, cfg.Depth, cfg.CountThereshold, cfg.M, cfg.Size, cfg.Base, cfg.B)
+		sketchImpl = statistic.NewSuperSpread(cfg.Width, cfg.Depth, cfg.CountThereshold, cfg.M, cfg.Size, cfg.Base, cfg.B, flowSize)
+	default:
+		log.Fatalf("Unknown sketch type: %d for task %s", cfg.SktType, cfg.Name)
+	}
 
 	return &Task{
-		name:          name,
-		flowFields:    flowFields,
-		elementFields: elementFields,
+		name:          cfg.Name,
+		flowFields:    cfg.FlowFields,
+		elementFields: cfg.ElementFields,
 		flowSize:      flowSize,
 		elemSize:      elemSize,
-		sketch:        statistic.NewCountMin(w, d, st, ct, flowSize),
+		sketch:        sketchImpl,
 	}
 }
 

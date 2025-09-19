@@ -2,6 +2,7 @@ package test
 
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
+	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/exact"
 	"Go2NetSpectra/internal/engine/impl/sketch"
 	"Go2NetSpectra/internal/model"
@@ -12,7 +13,6 @@ import (
 )
 
 var packets []*model.PacketInfo
-
 
 func BenchmarkAggregator(b *testing.B) {
 	pcapFilePath := "../../../../test/data/caida.pcap"
@@ -52,9 +52,18 @@ func BenchmarkAggregator(b *testing.B) {
 }
 
 func run_sketch_parallel(b *testing.B) {
-	Counthreshold := uint32(4096)
-	Sizethreshold := uint32(4096 * 1024)
-	task := sketch.New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<13, 2, Sizethreshold, Counthreshold)
+	cfg := config.SketchTaskDef{
+		Name:            "per_src_flow",
+		SktType:         0,
+		FlowFields:      []string{"SrcIP"},
+		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:           1 << 13,
+		Depth:           2,
+		SizeThereshold:  4096 * 1024,
+		CountThereshold: 4096,
+	}
+
+	task := sketch.New(cfg)
 
 	b.Run("Insert_Sketch_Parallel", func(b *testing.B) {
 		b.ResetTimer()
@@ -106,9 +115,18 @@ func run_exact_parallel(b *testing.B) {
 }
 
 func run_sketch(b *testing.B) {
-	Counthreshold := uint32(4096)
-	Sizethreshold := uint32(4096 * 1024)
-	task := sketch.New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<13, 2, Sizethreshold, Counthreshold)
+	cfg := config.SketchTaskDef{
+		Name:            "per_src_flow",
+		SktType:         0,
+		FlowFields:      []string{"SrcIP"},
+		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:           1 << 13,
+		Depth:           2,
+		SizeThereshold:  4096 * 1024,
+		CountThereshold: 4096,
+	}
+
+	task := sketch.New(cfg)
 
 	b.Run("Insert_Sketch", func(b *testing.B) {
 		b.ResetTimer()
