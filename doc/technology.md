@@ -46,7 +46,9 @@ graph TD
 
 - **数据接入层**: 对于 `ns-engine`，这是 `StreamAggregator`，它从 NATS 接收数据并放入 `Manager` 的输入通道。对于 `pcap-analyzer`，这是 `pcap.Reader`，它从文件读取数据并放入通道。
 - **并发调度层 (`Manager`)**: 引擎的“大脑”，负责并发调度和生命周期管理。它内部维护一个 **Worker Pool**，从输入通道消费数据，进行必要的类型转换，然后将数据扇出（Fan-out）给所有已注册的 `Task` 实例。
-- **业务执行层 (`Task`)**: 执行具体的聚合计算逻辑。每个 `Task` 都是一个独立的计算单元，例如 `exact` 任务负责精确统计，`sketch` 任务则负责概率统计（如 `Count-Min Sketch`）。
+- **业务执行层 (`Task`)**: 执行具体的聚合计算逻辑。每个 `Task` 都是一个独立的计算单元，例如 `exact` 任务负责精确统计，`sketch` 任务则负责概率统计，其底层可通过配置选择不同的算法：
+  - **Count-Min Sketch**: 用于估算**高频项 (Heavy Hitters)**，例如“哪个IP发送的流量最多”。
+  - **SuperSpread**: 用于估算**高基数项 (Super Spreaders)**，例如“哪个IP连接了最多的不同目标IP”，常用于DDoS攻击源或蠕虫的检测。
 
 ### 2.3. 性能与健壮性亮点
 
@@ -264,6 +266,17 @@ Exact 实现
 
 * 插入耗时：**2,502,471,279 ns → 582,881,990 ns** （**提速 4.3 倍**）
 * 查询耗时：**588,142,050 ns → 156,699,235 ns** （**提速 3.7 倍**）
+
+### 挑战六：异构 Sketch 算法的统一框架
+
+- **问题描述**: 在 `sketch` 聚合器下，我们希望同时支持用于**频率估算**的 `Count-Min` 和用于**基数估算**的 `SuperSpread`。这两种算法的目标、配置参数和内部逻辑完全不同。如何设计一个统一的 `sketch` 任务，使其能够根据配置动态加载并运行其中任意一种算法，而无需为每种算法都创建一个新的聚合器类型？
+
+- **解决方案：配置驱动的动态实例化**
+    1.  **统一接口**: 我们确保 `CountMin` 和 `SuperSpread` 都实现了统一的 `statistic.Sketch` 接口 (`Insert`, `Query`, `HeavyHitters`, `Reset`)，使得上层 `Task` 可以无差别地调用它们。
+    2.  **扩展配置结构**: 在 `config.yaml` 的 `sketch` 任务定义中，我们增加了一个 `skt_type` 字段（`0` 代表 `CountMin`，`1` 代表 `SuperSpread`），并为 `SuperSpread` 添加了 `m`, `size`, `base`, `b` 等专属配置项。
+    3.  **动态构造函数**: `sketch.New` 任务构造函数被重构，它接收整个 `SketchTaskDef` 配置结构。函数内部使用一个 `switch` 语句，根据 `skt_type` 的值来判断应该调用 `statistic.NewCountMin` 还是 `statistic.NewSuperSpread`，并传入各自所需的参数。
+
+    这个方案将“选择哪种算法”的决定权完全交给了用户配置，使得 `Task` 层代码保持了极高的通用性和稳定性。未来若要支持第三种 `sketch` 算法，我们只需实现其算法逻辑，并在 `New` 函数的 `switch` 中增加一个新的 `case` 即可，充分体现了框架的灵活性和可扩展性。
 
 ---
 
