@@ -4,6 +4,7 @@ import (
 	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"time"
@@ -36,14 +37,21 @@ func NewClickHouseQuerier(cfg config.ClickHouseConfig) (Querier, error) {
 func connect(cfg config.ClickHouseConfig) (clickhouse.Conn, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{addr},
-		Auth: clickhouse.Auth{
-			Database: cfg.Database,
-			Username: cfg.Username,
-			Password: cfg.Password,
-		},
-	})
+	opts := &clickhouse.Options{
+        Addr: []string{addr},
+        Auth: clickhouse.Auth{
+            Database: cfg.Database,
+            Username: cfg.Username,
+            Password: cfg.Password,
+        },
+    }
+    if cfg.Cloud {
+        opts.Protocol = clickhouse.HTTP
+        opts.TLS = &tls.Config{
+            InsecureSkipVerify: true,
+        }
+    }
+    conn, err := clickhouse.Open(opts)
 
 	if err != nil {
 		return nil, err

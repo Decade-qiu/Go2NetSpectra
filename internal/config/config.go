@@ -14,6 +14,7 @@ type ClickHouseConfig struct {
 	Database string `yaml:"database"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	Cloud    bool   `yaml:"cloud"`
 }
 
 // GobConfig holds the configuration for the gob file writer.

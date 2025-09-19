@@ -5,6 +5,7 @@ import (
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/model"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"time"
@@ -53,14 +54,21 @@ func (w *ClickHouseWriter) GetInterval() time.Duration {
 func connect(cfg config.ClickHouseConfig) (driver.Conn, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{addr},
-		Auth: clickhouse.Auth{
-			Database: cfg.Database,
-			Username: cfg.Username,
-			Password: cfg.Password,
-		},
-	})
+	opts := &clickhouse.Options{
+        Addr: []string{addr},
+        Auth: clickhouse.Auth{
+            Database: cfg.Database,
+            Username: cfg.Username,
+            Password: cfg.Password,
+        },
+    }
+    if cfg.Cloud {
+        opts.Protocol = clickhouse.HTTP
+        opts.TLS = &tls.Config{
+            InsecureSkipVerify: true,
+        }
+    }
+    conn, err := clickhouse.Open(opts)
 
 	if err != nil {
 		return nil, err

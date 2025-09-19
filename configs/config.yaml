@@ -7,7 +7,7 @@ api:
 # Configuration file for the network traffic aggregator system.
 aggregator:
   # Type of aggregator to use. Currently only "exact" is supported.
-  type: "exact"
+  type: "sketch"
   # The overall measurement period. At the end of each period, all task data is reset.
   # This should be longer than or equal to the longest writer snapshot_interval.
   period: "720h"
@@ -36,11 +36,19 @@ aggregator:
           database: "default"
           username: "default"
           password: "123"
+          cloud: false
     # List of specific aggregation tasks to run.
     tasks:
         - name: "per_src_ip"
           flow_fields: ["SrcIP"]
           element_fields: ["DstIP", "SrcPort", "DstPort", "Protocol"]
+          width: 32768
+          depth: 2
+          size_thereshold: 4096000
+          count_thereshold: 4096
+        - name: "per_five_tuple"
+          flow_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
+          element_fields: []
           width: 32768
           depth: 2
           size_thereshold: 4096000
@@ -68,6 +76,7 @@ aggregator:
           database: "default"
           username: "default"
           password: "123"
+          cloud: false
     # List of specific aggregation tasks to run.
     tasks:
         - name: "per_src_ip"
