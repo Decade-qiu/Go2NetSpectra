@@ -17,11 +17,11 @@ import (
 func main() {
 	// Command-line flags
 	serverAddr := flag.String("addr", "localhost:50051", "The gRPC server address")
-	mode := flag.String("mode", "heavyhitters", "Query mode: 'aggregate', 'trace', or 'heavyhitters'")
+	mode := flag.String("mode", "heavyhitters", "Query mode: 'aggregate', 'trace', 'heavyhitters', or 'superspreader'")
 	taskName := flag.String("task", "", "The name of the task to query")
 	flowKey := flag.String("key", "", "The flow key for trace mode (e.g., \"SrcIP=1.2.3.4,DstPort=443\")")
-	hhType := flag.Int("type", 0, "Heavy hitter type (0 for count, 1 for size)")
-	limit := flag.Int("limit", 10, "Limit for heavy hitters query")
+	hhType := flag.Int("type", 0, "Query type for heavyhitters (0 for count, 1 for size)")
+	limit := flag.Int("limit", 10, "Limit for heavy hitters/super spreader query")
 	defaultEnd := time.Now().UTC().Add(8 * time.Hour).Format(time.RFC3339)
 	endTimeStr := flag.String("end", defaultEnd, "End time in RFC3339 format (e.g., 2025-09-12T15:10:00Z).")
 
@@ -53,8 +53,10 @@ func main() {
 		doTraceQuery(ctx, client, *taskName, *flowKey, *endTimeStr)
 	case "heavyhitters":
 		doHeavyHittersQuery(ctx, client, *taskName, *hhType, *limit, *endTimeStr)
+	case "superspreader":
+		doSuperSpreaderQuery(ctx, client, *taskName, *limit, *endTimeStr)
 	default:
-		log.Fatalf("Unknown mode: %s. Use 'aggregate', 'trace', or 'heavyhitters'", *mode)
+		log.Fatalf("Unknown mode: %s. Use 'aggregate', 'trace', 'heavyhitters', or 'superspreader'", *mode)
 	}
 }
 
@@ -153,7 +155,7 @@ func doHeavyHittersQuery(ctx context.Context, client v1.QueryServiceClient, task
 		log.Fatalf("could not perform heavy hitters query: %v", err)
 	}
 
-	log.Printf("--- Heavy Hitters Results for ---")
+	log.Printf("--- Heavy Hitters Results ---")
 	if len(resp.Hitters) == 0 {
 		log.Println("No data returned.")
 		return
@@ -164,6 +166,37 @@ func doHeavyHittersQuery(ctx context.Context, client v1.QueryServiceClient, task
 		log.Printf("% -4d | % -40s | %d", i+1, hitter.Flow, hitter.Value)
 	}
 	log.Println("-----------------------------")
+}
+
+// doSuperSpreaderQuery performs a super spreader query.
+func doSuperSpreaderQuery(ctx context.Context, client v1.QueryServiceClient, taskName string, limit int, endTime string) {
+	log.Printf("Executing super spreader query for task: %s", taskName)
+	log.Printf("Limit: %d", limit)
+	log.Printf("Query params - End time: %s", endTime)
+
+	req := &v1.HeavyHittersRequest{
+		TaskName: taskName,
+		Type:     2, // Type 2 is for SuperSpreaders
+		EndTime:  parseAndConvert(endTime),
+		Limit:    int32(limit),
+	}
+
+	resp, err := client.QueryHeavyHitters(ctx, req)
+	if err != nil {
+		log.Fatalf("could not perform super spreader query: %v", err)
+	}
+
+	log.Printf("--- Super Spreader Results ---")
+	if len(resp.Hitters) == 0 {
+		log.Println("No data returned.")
+		return
+	}
+	log.Printf("% -4s | % -40s | %s", "Rank", "Flow", "Spread (Cardinality)")
+	log.Println(strings.Repeat("-", 60))
+	for i, hitter := range resp.Hitters {
+		log.Printf("% -4d | % -40s | %d", i+1, hitter.Flow, hitter.Value)
+	}
+	log.Println("------------------------------")
 }
 
 func parseAndConvert(endTimeStr string) *timestamppb.Timestamp {
