@@ -195,17 +195,28 @@ func (ss *SuperSpread) Insert(flow, elem []byte, size uint32) {
 		tempVV := int(math.Ceil(1.0 / tempP))
 		for tempVV > 0 {
 			tempVV--
-			val := atomic.LoadUint32(&ss.values[i][j])
-			if val == 0 {
-				copy(ss.keys[i][j], flow)
-				atomic.AddUint32(&ss.values[i][j], 1)
-			} else if bytes.Equal(ss.keys[i][j], flow) {
-				atomic.AddUint32(&ss.values[i][j], 1)
-			} else {
-				ppp := math.Pow(ss.b, -float64(val))
-				randFloatValue = rand.Float64()
-				if randFloatValue < ppp {
-					atomic.AddUint32(&ss.values[i][j], ^uint32(0)) // -1
+			for {
+				val := atomic.LoadUint32(&ss.values[i][j])
+				if val == 0 {
+					if atomic.CompareAndSwapUint32(&ss.values[i][j], 0, 1) {
+						copy(ss.keys[i][j], flow)
+						break
+					}
+				} else if bytes.Equal(ss.keys[i][j], flow) {
+					newVal := val + 1
+					if atomic.CompareAndSwapUint32(&ss.values[i][j], val, newVal) {
+						break
+					}
+				} else {
+					ppp := math.Pow(ss.b, -float64(val))
+					if rand.Float64() < ppp {
+						newVal := val - 1
+						if atomic.CompareAndSwapUint32(&ss.values[i][j], val, newVal) {
+							break
+						}
+					} else {
+						break
+					}
 				}
 			}
 		}
