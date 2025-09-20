@@ -18,7 +18,7 @@ import (
 // --- Factory Registration ---
 
 func init() {
-	factory.RegisterAggregator("exact", func(cfg *config.Config) ([]model.Task, []model.Writer, error) {
+	factory.RegisterAggregator("exact", func(cfg *config.Config) (*factory.TaskGroup, error) {
 		exactCfg := cfg.Aggregator.Exact
 
 		// Create all enabled writers for this aggregator group
@@ -57,7 +57,7 @@ func init() {
 			tasks[i] = New(taskCfg.Name, taskCfg.KeyFields, taskCfg.NumShards)
 		}
 
-		return tasks, writers, nil
+		return &factory.TaskGroup{Tasks: tasks, Writers: writers}, nil
 	})
 }
 

@@ -16,8 +16,7 @@ import (
 
 // Manager orchestrates a set of aggregation tasks and their writers.
 type Manager struct {
-	tasks   []model.Task
-	writers []model.Writer
+	taskGroups []factory.TaskGroup
 
 	// Worker pool for concurrent packet processing
 	packetChannel chan *v1.PacketInfo
@@ -33,7 +32,7 @@ type Manager struct {
 
 // New creates a new Manager.
 func NewManager(cfg *config.Config) (*Manager, error) {
-	tasks, writers, err := factory.Create(cfg)
+	taskGroups, err := factory.Create(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +46,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	}
 
 	return &Manager{
-		tasks:         tasks,
-		writers:       writers,
+		taskGroups:    taskGroups,
 		period:        period,
 		done:  		   make(chan struct{}),
 		packetChannel: make(chan *v1.PacketInfo, cfg.Aggregator.SizeOfPacketChannel),
@@ -58,19 +56,22 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 
 // Start begins the manager's packet processing workers, snapshotter, and resetter goroutines.
 func (m *Manager) Start() {
-	// Start a dedicated snapshotter for each writer
-	for _, writer := range m.writers {
-		m.snapshotterWg.Add(1)
-		go m.runSnapshotter(writer)
-		log.Printf("Started snapshotter for a writer with interval %s", writer.GetInterval())
+	// For each group, start a dedicated snapshotter for each of its writers.
+	for _, group := range m.taskGroups {
+		for _, writer := range group.Writers {
+			m.snapshotterWg.Add(1)
+			// Pass the group-specific tasks to the snapshotter
+			go m.runSnapshotter(writer, group.Tasks)
+			log.Printf("Started snapshotter for a writer with interval %s, handling %d tasks.", writer.GetInterval(), len(group.Tasks))
+		}
 	}
 
-	// Start the global resetter
+	// Start the global resetter for all tasks across all groups.
 	m.resetterWg.Add(1)
 	go m.runResetter()
 	log.Printf("Started global resetter with period %s", m.period)
 
-	// Start the packet processing worker pool
+	// Start the packet processing worker pool.
 	m.workerWg.Add(m.numWorkers)
 	for i := 0; i < m.numWorkers; i++ {
 		go m.worker()
@@ -78,8 +79,8 @@ func (m *Manager) Start() {
 	log.Printf("Manager started with %d workers.", m.numWorkers)
 }
 
-// runSnapshotter runs a dedicated snapshot loop for a single writer.
-func (m *Manager) runSnapshotter(writer model.Writer) {
+// runSnapshotter runs a dedicated snapshot loop for a single writer and its associated tasks.
+func (m *Manager) runSnapshotter(writer model.Writer, tasks []model.Task) {
 	defer m.snapshotterWg.Done()
 	interval := writer.GetInterval()
 	if interval <= 0 {
@@ -92,44 +93,35 @@ func (m *Manager) runSnapshotter(writer model.Writer) {
 	for {
 		select {
 		case <-ticker.C:
-			m.takeSnapshotForWriter(writer)
+			m.takeSnapshotForWriter(writer, tasks)
 		case <-m.done:
-			m.takeSnapshotForWriter(writer)
+			m.takeSnapshotForWriter(writer, tasks)
 			return
 		}
 	}
 }
 
 // takeSnapshotForWriter orchestrates taking and writing a snapshot for a specific writer.
-// Warning: 
-// In this implementation, different tasks may complete their snapshotting at different times.
-// This means that the snapshot data written for a given timestamp may not represent
-// a perfectly synchronized view across all tasks. If strict synchronization is required,
-// additional coordination would be needed.
-func (m *Manager) takeSnapshotForWriter(writer model.Writer) {
+func (m *Manager) takeSnapshotForWriter(writer model.Writer, tasks []model.Task) {
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	// Note: This concurrent snapshotting assumes that task.Snapshot() is thread-safe
-	// with respect to other snapshot calls. The current implementation is safe because
-	// it atomically swaps maps.
-	log.Printf("Taking snapshot for writer at %s for %d tasks.", timestamp, len(m.tasks))
+	log.Printf("Taking snapshot for writer at %s for %d tasks.", timestamp, len(tasks))
 
 	var wg sync.WaitGroup
-	wg.Add(len(m.tasks)) // Wait for all tasks to finish snapshotting
+	wg.Add(len(tasks)) // Wait for all tasks in this group to finish snapshotting
 
-	for _, task := range m.tasks {
+	for _, task := range tasks {
 		go func(t model.Task) {
 			defer wg.Done()
-			snapshotData := task.Snapshot()
-			if err := writer.Write(snapshotData, timestamp, task.Name(), task.Fields(), task.DecodeFlowFunc()); err != nil {
-				log.Printf("Error writing snapshot for task %s: %v", task.Name(), err)
+			snapshotData := t.Snapshot()
+			if err := writer.Write(snapshotData, timestamp, t.Name(), t.Fields(), t.DecodeFlowFunc()); err != nil {
+				log.Printf("Error writing snapshot for task %s: %v", t.Name(), err)
 			}
 		}(task)
 	}
 
-	wg.Wait() // Wait for all tasks to complete
+	wg.Wait() // Wait for all tasks in this group to complete
 
-	timestamp = time.Now().Format("2006-01-02_15-04-05")
-	log.Printf("Completed snapshot for writer at %s.", timestamp)
+	log.Printf("Completed snapshot for writer at %s.", time.Now().Format("2006-01-02_15-04-05"))
 }
 
 // runResetter runs a dedicated loop to reset all tasks periodically.
@@ -149,27 +141,20 @@ func (m *Manager) runResetter() {
 	}
 }
 
-// resetAllTasks iterates through all tasks and calls their Reset method.
-// Warning: 
-// In this implementation, different tasks may complete their resetting at different times.
-// This means that the reset operation does not happen simultaneously across all tasks.
-// So in next measurement period, tasks may start from slightly different states.
-// i.e., some tasks may record more packets than others.
+// resetAllTasks iterates through all tasks across all groups and calls their Reset method.
 func (m *Manager) resetAllTasks() {
-	log.Printf("Resetting all tasks for new measurement period at %s for %d tasks.", time.Now().Format("2006-01-02_15-04-05"), len(m.tasks))
-
+	log.Printf("Resetting all tasks for new measurement period at %s", time.Now().Format("2006-01-02_15-04-05"))
 	var wg sync.WaitGroup
-	wg.Add(len(m.tasks)) // Wait for all tasks to finish resetting
-
-	for _, task := range m.tasks {
-		go func(t model.Task) {
-			defer wg.Done()
-			task.Reset()
-		}(task)
+	for _, group := range m.taskGroups {
+		wg.Add(len(group.Tasks))
+		for _, task := range group.Tasks {
+			go func(t model.Task) {
+				defer wg.Done()
+				t.Reset()
+			}(task)
+		}
 	}
-
 	wg.Wait() // Wait for all tasks to complete
-
 	log.Println("All tasks have been reset at ", time.Now().Format("2006-01-02_15-04-05"))
 }
 
@@ -207,8 +192,11 @@ func (m *Manager) worker() {
 				Protocol: uint8(pbPacket.FiveTuple.Protocol),
 			},
 		}
-		for _, task := range m.tasks {
-			task.ProcessPacket(info)
+		// Fan out the packet to all tasks in all groups
+		for _, group := range m.taskGroups {
+			for _, task := range group.Tasks {
+				task.ProcessPacket(info)
+			}
 		}
 	}
 }

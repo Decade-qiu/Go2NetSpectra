@@ -17,7 +17,7 @@ import (
 // --- Factory Registration ---
 
 func init() {
-	factory.RegisterAggregator("sketch", func(cfg *config.Config) ([]model.Task, []model.Writer, error) {
+	factory.RegisterAggregator("sketch", func(cfg *config.Config) (*factory.TaskGroup, error) {
 		sketchCfg := cfg.Aggregator.Sketch
 
 		// Create all enabled writers for this aggregator group
@@ -59,7 +59,7 @@ func init() {
 			tasks[i] = New(taskCfg)
 		}
 
-		return tasks, writers, nil
+		return &factory.TaskGroup{Tasks: tasks, Writers: writers}, nil
 	})
 }
 

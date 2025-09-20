@@ -75,7 +75,7 @@ type SketchAggregatorConfig struct {
 
 // AggregatorConfig holds the top-level aggregator settings.
 type AggregatorConfig struct {
-	Type                string                 `yaml:"type"`
+	Types               []string               `yaml:"types"`
 	Period              string                 `yaml:"period"`
 	NumWorkers          int                    `yaml:"num_workers"`
 	SizeOfPacketChannel int                    `yaml:"size_of_packet_channel"`

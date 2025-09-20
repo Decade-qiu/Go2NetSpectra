@@ -7,7 +7,9 @@ api:
 # Configuration file for the network traffic aggregator system.
 aggregator:
   # Type of aggregator to use. Currently only "exact" is supported.
-  type: "sketch"
+  types:
+    - "sketch"
+    - "exact"
   # The overall measurement period. At the end of each period, all task data is reset.
   # This should be longer than or equal to the longest writer snapshot_interval.
   period: "720h"
@@ -31,26 +33,26 @@ aggregator:
         enabled: true
         snapshot_interval: "60s"
         clickhouse:
-          host: "btfxcq3r38.germanywestcentral.azure.clickhouse.cloud"
+          host: "azure.clickhouse.cloud"
           port: 8443
           database: "default"
           username: "default"
-          password: "9jjb01vzR3q_a"
+          password: ""
           cloud: true
     # List of specific aggregation tasks to run.
     tasks:
-        - name: "super_spread"
+        - name: "ss_dst_src"
           skt_type: 1
-          flow_fields: ["SrcIP"]
-          element_fields: ["DstIP"]
+          flow_fields: ["DstIP"]
+          element_fields: ["SrcIP"]
           width: 32768
           depth: 2
-          count_thereshold: 512
+          count_thereshold: 36
           m : 128
           size: 5
           b: 1.08
           base: 0.5  
-        - name: "per_src_ip"
+        - name: "cm_src_left"
           skt_type: 0
           flow_fields: ["SrcIP"]
           element_fields: ["DstIP", "SrcPort", "DstPort", "Protocol"]
@@ -58,7 +60,7 @@ aggregator:
           depth: 2
           size_thereshold: 4096000
           count_thereshold: 4096
-        - name: "per_five_tuple"
+        - name: "cm_all_none"
           skt_type: 0
           flow_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
           element_fields: []
@@ -78,18 +80,14 @@ aggregator:
           root_path: "test/res"
       - type: "clickhouse"
         enabled: true
-        snapshot_interval: "30s"
-        # ClickHouse connection settings
-        # you can run a local ClickHouse server with:
-        # docker run -d -p 18123:8123 -p19000:9000 -e CLICKHOUSE_PASSWORD=123 --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
-        # echo 'SELECT version()' | curl 'http://localhost:18123/?password=123' --data-binary @-
+        snapshot_interval: "120s"
         clickhouse:
-          host: "localhost"
-          port: 19000
+          host: "azure.clickhouse.cloud"
+          port: 8443
           database: "default"
           username: "default"
-          password: "123"
-          cloud: false
+          password: ""
+          cloud: true
     # List of specific aggregation tasks to run.
     tasks:
         - name: "per_src_ip"
