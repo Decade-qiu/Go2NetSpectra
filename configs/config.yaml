@@ -39,7 +39,19 @@ aggregator:
           cloud: false
     # List of specific aggregation tasks to run.
     tasks:
+        - name: "super_spread"
+          type: 1
+          flow_fields: ["SrcIP"]
+          element_fields: ["DstIP"]
+          width: 32768
+          depth: 2
+          count_thereshold: 512
+          m : 128
+          size: 5
+          b: 1.08
+          base: 0.5  
         - name: "per_src_ip"
+          type: 0
           flow_fields: ["SrcIP"]
           element_fields: ["DstIP", "SrcPort", "DstPort", "Protocol"]
           width: 32768
@@ -47,6 +59,7 @@ aggregator:
           size_thereshold: 4096000
           count_thereshold: 4096
         - name: "per_five_tuple"
+          type: 0
           flow_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
           element_fields: []
           width: 32768
