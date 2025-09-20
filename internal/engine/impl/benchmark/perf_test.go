@@ -7,8 +7,10 @@ import (
 	"Go2NetSpectra/internal/engine/impl/sketch"
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/pkg/pcap"
+	"fmt"
 	"log"
 	"net"
+	"sync"
 	"testing"
 )
 
@@ -44,14 +46,58 @@ func BenchmarkAggregator(b *testing.B) {
 		packets = append(packets, info)
 	}
 
-	b.Run("Sketch_Parallel", run_sketch_parallel)
+	// b.Run("CM_Parallel", run_cm_parallel)
+	b.Run("SS_Parallel", run_SS_parallel)
+	b.Run("SS_Exact_Parallel", run_ssexact_parallel)
 	// b.Run("Exact_Parallel", run_exact_parallel)
 
-	// run_sketch(b)
+	// run_cm(b)
+	// run_ss(b)
 	// run_exact(b)
 }
 
-func run_sketch_parallel(b *testing.B) {
+func run_SS_parallel(b *testing.B) {
+	cfg := config.SketchTaskDef{
+		Name:            "SuperSpread",
+		SktType:         1,
+		FlowFields:      []string{"SrcIP"},
+		ElementFields:   []string{"DstIP"},
+		Width:           1 << 13,
+		Depth:           2,
+		SizeThereshold:  0,
+		CountThereshold: 512,
+		M: 128,
+		Base: 0.5,
+		Size: 5,
+		B: 1.08,
+	}
+
+	task := sketch.New(cfg)
+
+	b.Run("Insert_SS_Parallel", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, pkt := range packets {
+					task.ProcessPacket(pkt)
+				}
+			}
+		})
+	})
+
+	b.Run("Query_SS_Parallel", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, pkt := range packets {
+					task.Query(pkt.FiveTuple.SrcIP.To16())
+				}
+			}
+		})
+	})
+}
+
+func run_cm_parallel(b *testing.B) {
 	cfg := config.SketchTaskDef{
 		Name:            "per_src_flow",
 		SktType:         0,
@@ -114,7 +160,42 @@ func run_exact_parallel(b *testing.B) {
 	})
 }
 
-func run_sketch(b *testing.B) {
+func run_ssexact_parallel(b *testing.B) {
+	spreadMap := make(map[string]map[string]bool)
+	var mu sync.Mutex 
+
+	b.Run("Insert_spreadmap_Parallel", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, pkt := range packets {
+					key := pkt.FiveTuple.SrcIP.String()
+					elem := fmt.Sprintf("%s",
+						pkt.FiveTuple.DstIP.String())
+					mu.Lock()
+					if _, exists := spreadMap[key]; !exists {
+						spreadMap[key] = make(map[string]bool)
+					}
+					spreadMap[key][elem] = true
+					mu.Unlock()
+				}
+			}
+		})
+	})
+
+	b.Run("Query_spreadmap_Parallel", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, pkt := range packets {
+					_ = len(spreadMap[pkt.FiveTuple.SrcIP.String()])
+				}
+			}
+		})
+	})
+}
+
+func run_cm(b *testing.B) {
 	cfg := config.SketchTaskDef{
 		Name:            "per_src_flow",
 		SktType:         0,
@@ -138,6 +219,43 @@ func run_sketch(b *testing.B) {
 	})
 
 	b.Run("Query_Sketch", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, pkt := range packets {
+				task.Query(pkt.FiveTuple.SrcIP.To16())
+			}
+		}
+	})
+}
+
+func run_ss(b *testing.B) {
+	cfg := config.SketchTaskDef{
+		Name:            "SuperSpread",
+		SktType:         1,
+		FlowFields:      []string{"SrcIP"},
+		ElementFields:   []string{"DstIP"},
+		Width:           1 << 13,
+		Depth:           2,
+		SizeThereshold:  0,
+		CountThereshold: 512,
+		M: 128,
+		Base: 0.5,
+		Size: 5,
+		B: 1.08,
+	}
+
+	task := sketch.New(cfg)
+
+	b.Run("Insert_SS", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, pkt := range packets {
+				task.ProcessPacket(pkt)
+			}
+		}
+	})
+
+	b.Run("Query_SS", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			for _, pkt := range packets {
