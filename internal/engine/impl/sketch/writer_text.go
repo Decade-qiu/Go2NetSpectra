@@ -12,8 +12,8 @@ import (
 
 // TextWriter handles writing heavy hitters to a text file.
 type TextWriter struct {
-	rootPath       string
-	interval       time.Duration
+	rootPath string
+	interval time.Duration
 }
 
 // NewTextWriter creates a new text writer for heavy hitters.
@@ -39,37 +39,56 @@ func (w *TextWriter) Write(payload interface{}, timestamp, name string, fields [
 
 	total := 0
 
-	// size
-	filePath := filepath.Join(taskDir, "size_hh.txt")
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create snapshot file '%s': %w", filePath, err)
-	}
-	defer file.Close()
-
-	for _, hitter := range heavyHitters.Size {
-		line := fmt.Sprintf("%s %d\n", decodeFlowFunc(hitter.Flow, fields), hitter.Size)
-		if _, err := file.WriteString(line); err != nil {
-			return fmt.Errorf("failed to write heavy hitter to file: %w", err)
-		} else {
-			total++
+	if heavyHitters.Size != nil {
+		// size
+		filePath := filepath.Join(taskDir, "size_hh.txt")
+		file, err := os.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to create snapshot file '%s': %w", filePath, err)
 		}
-	}
+		defer file.Close()
 
-	// count
-	filePath = filepath.Join(taskDir, "count_hh.txt")
-	file, err = os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create snapshot file '%s': %w", filePath, err)
-	}
-	defer file.Close()
+		for _, hitter := range heavyHitters.Size {
+			line := fmt.Sprintf("%s %d\n", decodeFlowFunc(hitter.Flow, fields), hitter.Size)
+			if _, err := file.WriteString(line); err != nil {
+				return fmt.Errorf("failed to write heavy hitter to file: %w", err)
+			} else {
+				total++
+			}
+		}
 
-	for _, hitter := range heavyHitters.Count {
-		line := fmt.Sprintf("%s %d\n", decodeFlowFunc(hitter.Flow, fields), hitter.Count)
-		if _, err := file.WriteString(line); err != nil {
-			return fmt.Errorf("failed to write heavy hitter to file: %w", err)
-		} else {
-			total++
+		// count
+		filePath = filepath.Join(taskDir, "count_hh.txt")
+		file, err = os.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to create snapshot file '%s': %w", filePath, err)
+		}
+		defer file.Close()
+
+		for _, hitter := range heavyHitters.Count {
+			line := fmt.Sprintf("%s %d\n", decodeFlowFunc(hitter.Flow, fields), hitter.Count)
+			if _, err := file.WriteString(line); err != nil {
+				return fmt.Errorf("failed to write heavy hitter to file: %w", err)
+			} else {
+				total++
+			}
+		}
+	} else {
+		// count
+		filePath := filepath.Join(taskDir, "spread_ss.txt")
+		file, err := os.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to create snapshot file '%s': %w", filePath, err)
+		}
+		defer file.Close()
+
+		for _, hitter := range heavyHitters.Count {
+			line := fmt.Sprintf("%s %d\n", decodeFlowFunc(hitter.Flow, fields), hitter.Count)
+			if _, err := file.WriteString(line); err != nil {
+				return fmt.Errorf("failed to write heavy hitter to file: %w", err)
+			} else {
+				total++
+			}
 		}
 	}
 

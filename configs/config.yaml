@@ -23,7 +23,7 @@ aggregator:
     # All tasks within this block share this snapshot interval and writer list.
     writers:
       - type: "text"
-        enabled: true
+        enabled: false
         snapshot_interval: "60s"
         text:
           root_path: "test/res"
@@ -31,16 +31,16 @@ aggregator:
         enabled: true
         snapshot_interval: "60s"
         clickhouse:
-          host: "localhost"
-          port: 19000
+          host: "btfxcq3r38.germanywestcentral.azure.clickhouse.cloud"
+          port: 8443
           database: "default"
           username: "default"
-          password: "123"
-          cloud: false
+          password: "9jjb01vzR3q_a"
+          cloud: true
     # List of specific aggregation tasks to run.
     tasks:
         - name: "super_spread"
-          type: 1
+          skt_type: 1
           flow_fields: ["SrcIP"]
           element_fields: ["DstIP"]
           width: 32768
@@ -51,7 +51,7 @@ aggregator:
           b: 1.08
           base: 0.5  
         - name: "per_src_ip"
-          type: 0
+          skt_type: 0
           flow_fields: ["SrcIP"]
           element_fields: ["DstIP", "SrcPort", "DstPort", "Protocol"]
           width: 32768
@@ -59,7 +59,7 @@ aggregator:
           size_thereshold: 4096000
           count_thereshold: 4096
         - name: "per_five_tuple"
-          type: 0
+          skt_type: 0
           flow_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
           element_fields: []
           width: 32768

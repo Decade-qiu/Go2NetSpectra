@@ -96,25 +96,37 @@ func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fi
 
 	total := 0
 
-	// size
-	for _, hitter := range heavyHitters.Size {
-		flow := decodeFlowFunc(hitter.Flow, fields)
-		err = batch.Append(snapshotTime, name, flow, hitter.Size, 1)
-		if err != nil {
-			return fmt.Errorf("failed to append heavy hitter to batch: %w", err)
-		} else {
-			total++
+	if heavyHitters.Size != nil {
+		// size
+		for _, hitter := range heavyHitters.Size {
+			flow := decodeFlowFunc(hitter.Flow, fields)
+			err = batch.Append(snapshotTime, name, flow, hitter.Size, 1)
+			if err != nil {
+				return fmt.Errorf("failed to append heavy hitter to batch: %w", err)
+			} else {
+				total++
+			}
 		}
-	}
-
-	// count
-	for _, hitter := range heavyHitters.Count {
-		flow := decodeFlowFunc(hitter.Flow, fields)
-		err = batch.Append(snapshotTime, name, flow, hitter.Count, 0)
-		if err != nil {
-			return fmt.Errorf("failed to append heavy hitter to batch: %w", err)
-		} else {
-			total++
+		// count
+		for _, hitter := range heavyHitters.Count {
+			flow := decodeFlowFunc(hitter.Flow, fields)
+			err = batch.Append(snapshotTime, name, flow, hitter.Count, 0)
+			if err != nil {
+				return fmt.Errorf("failed to append heavy hitter to batch: %w", err)
+			} else {
+				total++
+			}
+		}
+	} else {
+		// count
+		for _, hitter := range heavyHitters.Count {
+			flow := decodeFlowFunc(hitter.Flow, fields)
+			err = batch.Append(snapshotTime, name, flow, hitter.Count, 2)
+			if err != nil {
+				return fmt.Errorf("failed to append heavy hitter to batch: %w", err)
+			} else {
+				total++
+			}
 		}
 	}
 
