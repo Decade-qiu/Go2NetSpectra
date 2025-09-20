@@ -65,7 +65,44 @@ docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=123 --name some
 
 ### 3.2. 运行应用
 
-确保您的 `configs/config.yaml` 文件中的地址指向 `localhost`（例如 `nats_url: nats://localhost:4222`, `host: localhost`, `port: 19000`）。
+确保您的 `configs/config.yaml` 文件中的地址指向 `localhost`，并已配置好您希望同时运行的聚合器类型。
+
+**示例 `config.yaml` 片段：**
+```yaml
+aggregator:
+  types: ["sketch", "exact"] # 同时运行 sketch 和 exact 聚合器
+  period: "720h"
+  num_workers: 4
+  size_of_packet_channel: 10000
+
+  sketch:
+    writers:
+      - type: "clickhouse"
+        enabled: true
+        snapshot_interval: "10s"
+        clickhouse:
+          host: "localhost"
+          port: 19000
+          password: "123"
+          # ...
+    tasks:
+      # ... sketch 任务定义
+
+  exact:
+    writers:
+      - type: "clickhouse"
+        enabled: true
+        snapshot_interval: "10s"
+        clickhouse:
+          host: "localhost"
+          port: 19000
+          password: "123"
+          # ...
+    tasks:
+      # ... exact 任务定义
+```
+
+然后，在不同终端中启动核心服务：
 
 ```sh
 # 终端 3: 启动引擎

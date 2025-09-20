@@ -15,104 +15,69 @@
 
 ---
 
-## 2. 核心引擎架构
+## 2. 核心引擎架构：并发、隔离与扩展
 
-`ns-engine` 和 `pcap-analyzer` 共享一套核心处理引擎。该引擎被设计为一个职责清晰、高度解耦的三层模型，这不仅提升了性能，也为未来的功能扩展提供了极大的灵活性。
+`ns-engine` 的核心是一个经过精心设计的、支持并发聚合的、可插拔的分析引擎。它不仅实现了高性能，更通过一系列精巧的机制保证了数据处理的隔离性、一致性和可扩展性。
 
-### 2.1. 顶层设计：接口驱动
+### 2.1. 顶层设计：接口驱动与逻辑分组
 
-架构的基石是 `internal/model` 中定义的一系列核心接口：
+架构的基石是 `internal/model` 中定义的核心接口 (`Task`, `Writer`) 和 `internal/factory` 中定义的逻辑分组单元：
 
-- **`model.Task`**: 定义了一个独立的、可插拔的聚合任务。它包含 `ProcessPacket` 用于处理数据包，`Snapshot` 用于提供当前聚合数据的只读快照，以及 `Reset` 用于清空内部状态以开始新的测量周期。为了实现 `Task` 与 `Writer` 的深度解耦，`Task` 接口还新增了 `Fields()` 和 `DecodeFlowFunc()` 方法，允许 `Task` 向 `Writer` 暴露其流的构成和解码方式。
-- **`model.Writer`**: 定义了数据写入器的标准行为。它的 `Write` 方法现在接收来自 `Task` 的元信息（如任务名、字段列表、解码函数），使其能够处理来自不同类型 `Task` 的、格式各异的数据。`GetInterval` 方法则用于告知 `Manager` 其期望的快照频率。
+- **`model.Task`**: 定义了一个独立的、可插拔的聚合任务。它封装了数据处理（`ProcessPacket`）、数据提取（`Snapshot`）和状态重置（`Reset`）的全部逻辑。
+- **`model.Writer`**: 定义了数据写入器的标准行为，负责将 `Task` 的快照持久化。
+- **`factory.TaskGroup`**: 这是一个关键的结构，它将一组逻辑相关的 `Task` 和为它们服务的 `Writer` 绑定在一起。
 
-### 2.2. 核心实现：三层解耦模型
+### 2.2. 核心实现：并发调度与隔离执行
 
-引擎的内部工作流程被清晰地划分为三个层次。
+引擎的工作流程被清晰地划分为多个层次，确保了职责的单一和高度的解耦。
 
 ```mermaid
 graph TD
     subgraph "Engine Core"
-        direction LR
-        A[Input Channel] -- Protobuf --> B(Manager Worker Pool)
-        B -- model.PacketInfo --> C{Task 1}
-        B -- model.PacketInfo --> D{Task 2}
-        B -- model.PacketInfo --> E[...]
-        C -- Snapshot --> F[Writer]
-        D -- Snapshot --> F
-        E -- Snapshot --> F
+        direction TB
+        A[Input Channel] -- Protobuf --> B(Manager: Worker Pool)
+        
+        subgraph "Aggregator Group 1: Sketch"
+            direction LR
+            B -- fan-out --> Task_Sketch1(Task: Count-Min)
+            Task_Sketch1 -- snapshot --> Writer_Sketch(Writer)
+        end
+
+        subgraph "Aggregator Group 2: Exact"
+            direction LR
+            B -- fan-out --> Task_Exact1(Task: Per-Flow Accounting)
+            Task_Exact1 -- snapshot --> Writer_Exact(Writer)
+        end
     end
 ```
 
-- **数据接入层**: 对于 `ns-engine`，这是 `StreamAggregator`，它从 NATS 接收数据并放入 `Manager` 的输入通道。对于 `pcap-analyzer`，这是 `pcap.Reader`，它从文件读取数据并放入通道。
-- **并发调度层 (`Manager`)**: 引擎的“大脑”，负责并发调度和生命周期管理。它内部维护一个 **Worker Pool**，从输入通道消费数据，进行必要的类型转换，然后将数据扇出（Fan-out）给所有已注册的 `Task` 实例。
-- **业务执行层 (`Task`)**: 执行具体的聚合计算逻辑。每个 `Task` 都是一个独立的计算单元，例如 `exact` 任务负责精确统计，`sketch` 任务则负责概率统计，其底层可通过配置选择不同的算法：
-  - **Count-Min Sketch**: 用于估算**高频项 (Heavy Hitters)**，例如“哪个IP发送的流量最多”。
-  - **SuperSpread**: 用于估算**高基数项 (Super Spreaders)**，例如“哪个IP连接了最多的不同目标IP”，常用于DDoS攻击源或蠕虫的检测。
+- **数据接入层**: `StreamAggregator` 从 NATS 消费数据，并将其送入 `Manager` 的输入通道。
+- **并发调度层 (`Manager`)**: 引擎的“大脑”。它内部维护一个 **Worker Pool**，从输入通道消费数据包，然后将数据包**扇出（Fan-out）给所有聚合器组中的所有 `Task` 实例**。
+- **隔离执行层 (`TaskGroup`)**: `Manager` 不再直接管理 `Task` 和 `Writer` 的扁平列表，而是管理一个 `[]TaskGroup`。当启动时，`Manager` 会遍历每个 `TaskGroup`，并为该组内的每个 `Writer` 启动一个专属的 `snapshotter` 协程。**至关重要的是，这个协程只会被传入其所在 `TaskGroup` 内部的 `Task` 列表**。这确保了 `exact` 的 `Writer` 只会处理 `exact` 的 `Task`，`sketch` 的 `Writer` 只会处理 `sketch` 的 `Task`，彻底解决了数据串扰的问题。
 
-### 2.3. 性能与健壮性亮点
+### 2.3. 扩展性亮点：插件式的聚合器工厂
 
-为了在高并发下保证高性能和数据一致性，我们采用了以下设计模式：
+为了实现真正的“可插拔”架构，我们结合了**工厂模式**与 Go 语言的**包初始化**机制。这使得添加一个新的聚合器类型无需修改任何核心引擎代码。
 
-- **异步持久化探针**: `ns-probe` 在将数据包发布到 NATS 之前，可以选择性地将数据包**异步**写入本地文件。我们为此设计了一个 `persistent.Worker`，它内部维护一个带缓冲的 channel 和一个独立的协程池。`Publisher` 只需将数据包（原始 `gopacket.Packet` 或解析后的 `model.PacketInfo`）非阻塞地发送到 channel 中，独立的 worker 协程会负责处理磁盘 I/O。这种设计将磁盘写入的延迟与网络发布的主路径完全解耦，确保了持久化功能不会影响探针的抓包和发布性能。
-- **并发模型：Worker Pool + Channel**: `Manager` 内部启动一个可配置的 **Worker Pool** 并发地处理数据包，充分利用多核CPU资源。数据包通过 `channel` 在生产者和消费者（Worker）之间传递，实现了I/O与计算的并行。
-- **无锁并发：分片 (Sharding)**: 在 `exact` 任务内部，为了解决并发访问聚合 `map` 时的锁竞争问题，我们采用了 **分片（Sharding）** 的设计。通过对流的 Key 进行哈希，将不同流的更新压力分散到多个独立的、由独立锁保护的 `map` 中，显著提升了并发性能。
-- **只读快照 (Read-Only Snapshot)**: `Task` 的 `Snapshot()` 方法现在严格执行**只读操作**。它会返回当前聚合数据的**深拷贝副本**，确保在数据写入过程中，聚合任务的内部状态不会被修改，从而避免了并发写入时的数据不一致问题。
-- **周期性重置 (Periodic Reset)**: `Manager` 引入了一个独立的 `resetter` 协程，根据全局配置的 `period` 定期触发所有 `Task` 的 `Reset()` 方法。`Reset()` 方法负责原子性地清空 `Task` 的内部聚合状态，为新的测量周期做准备。这种机制将数据读取（快照）和数据清零（重置）的职责彻底分离，保证了数据在每个测量周期内的完整性和准确性。
-- **灵活的写入器调度**: 每个 `Writer` 都可以独立配置其 `snapshot_interval`。`Manager` 会为每个启用的 `Writer` 启动一个独立的 `snapshotter` 协程，按照各自的 `snapshot_interval` 频率从 `Task` 获取只读快照并进行持久化。这使得不同数据目标可以有不同的写入频率，极大地提升了系统的灵活性。
-- **健壮性：优雅停机 (Graceful Shutdown)**: `Manager` 的 `Stop()` 方法实现了一个多阶段的关闭序列。它会先关闭输入通道，等待所有 `worker` 将缓冲数据处理完毕，然后信号通知所有 `snapshotter` 和 `resetter` 协程执行最终的快照和重置操作。这个机制**确保了每一个数据包都在程序退出前被完全统计**，实现了 100% 的数据完整性。
-
-### 2.4. 扩展性亮点：插件式的聚合器工厂与灵活的写入器配置
-
-为了实现真正的“可插拔”架构，我们结合了**工厂模式**与 Go 语言的**包初始化**机制。这使得添加一个新的聚合器类型无需修改任何核心引擎代码，只需遵循约定即可，极大地提升了项目的可维护性和扩展性。
-
-`Manager` 的创建过程由配置文件 `config.yaml` 驱动。管理员可以通过 `type` 字段（如 `exact` 或 `sketch`）来声明使用哪种聚合引擎。`manager.NewManager` 函数会通过一个中央工厂，动态地创建出该类型对应的所有 `Task` 实例和**预配置的 `Writer` 实例**。
+`Manager` 的创建过程由配置文件 `config.yaml` 中的 `aggregator.types` 列表驱动。`manager.NewManager` 函数会通过一个中央工厂，为列表中的每个类型动态地创建出对应的 `TaskGroup`。
 
 #### **如何实现一个新的聚合器？**
 
-这个设计的一大亮点是为开发者提供了极简的扩展方式。要向系统中添加一个全新的聚合器（例如，一个基于 `HyperLogLog` 的估算器），开发者只需完成两个步骤：
-
-1.  **实现并注册工厂**：在你的实现包（例如 `internal/engine/impl/hll`）中，实现 `model.Task` 接口，并在包的 `init()` 函数中调用 `factory.RegisterAggregator()`，将聚合器的名字和它的构造工厂函数注册进去。这个工厂函数现在需要返回 `Task` 实例列表和**已根据配置创建好的 `Writer` 实例列表**。
+1.  **实现并注册工厂**：在你的实现包（例如 `internal/engine/impl/hll`）中，实现 `model.Task` 接口，并在包的 `init()` 函数中调用 `factory.RegisterAggregator()`。这个工厂函数现在必须返回一个 `*factory.TaskGroup`，其中包含了为这个聚合器创建的所有 `Task` 和 `Writer`。
 
     ```go
     // internal/engine/impl/hll/task.go
     package hll
 
     import (
-        "Go2NetSpectra/internal/config"
         "Go2NetSpectra/internal/factory"
-        "Go2NetSpectra/internal/model"
-        "time"
+        // ...
     )
 
     func init() {
-        factory.RegisterAggregator("hll", func(cfg *config.Config) ([]model.Task, []model.Writer, error) {
-            hllCfg := cfg.Aggregator.HLL // 假设HLL有自己的配置块
-
-            // 创建HLL任务实例
-            tasks := make([]model.Task, len(hllCfg.Tasks))
-            for i, taskCfg := range hllCfg.Tasks {
-                tasks[i] = NewHLLTask(taskCfg.Name, taskCfg.KeyFields) // 假设HLL任务的构造函数
-            }
-
-            // 创建并返回配置中启用的Writer实例
-            writers := make([]model.Writer, 0, len(hllCfg.Writers))
-            for _, writerDef := range hllCfg.Writers {
-                if !writerDef.Enabled {
-                    continue
-                }
-                interval, _ := time.ParseDuration(writerDef.SnapshotInterval)
-                var writer model.Writer
-                switch writerDef.Type {
-                case "gob":
-                    writer = NewGobWriter(writerDef.Gob.RootPath, interval)
-                case "clickhouse":
-                    writer, _ = NewClickHouseWriter(writerDef.ClickHouse, interval)
-                // ... 其他writer类型
-                }
-                writers = append(writers, writer)
-            }
-            return tasks, writers, nil
+        factory.RegisterAggregator("hll", func(cfg *config.Config) (*factory.TaskGroup, error) {
+            // ... 创建 tasks 和 writers
+            return &factory.TaskGroup{Tasks: tasks, Writers: writers}, nil
         })
     }
     ```
@@ -128,15 +93,41 @@ graph TD
     )
     ```
 
-通过这个机制，`Manager` 与具体的 `Task` 实现完全解耦，任何开发者都可以独立开发自己的聚合器插件并轻松集成到 Go2NetSpectra 框架中。同时，每个聚合器类型可以根据其配置，灵活地创建和管理其专属的写入器，实现了高度的定制化和可扩展性。
+通过这个机制，`Manager` 与具体的 `Task` 实现完全解耦，任何开发者都可以独立开发自己的聚合器插件并轻松集成到 Go2NetSpectra 框架中。
 
 ---
 
-## 2.5. 核心技术挑战与解决方案
+## 3. API 服务架构：智能查询路由
 
-在 Go2NetSpectra 的架构演进过程中，我们遇到并解决了一些关键的技术挑战，这些解决方案共同构成了框架健壮性和灵活性的基石。
+随着引擎支持并发聚合，`ns-api` 服务也演进为一个能够处理多个异构数据源的智能查询网关。
 
-### 挑战一：多写入器引发的数据竞争
+- **多查询器实例 (Multi-Querier)**: `ns-api` 在启动时，不再创建一个单一的 `Querier`。相反，它会检查配置文件中的 `aggregator.types` 列表。如果 `exact` 被启用并且配置了 ClickHouse `Writer`，它就会创建一个 `exactQuerier`。同理，如果 `sketch` 被启用，它会创建 `sketchQuerier`。
+
+- **基于 RPC 的路由**: `QueryServiceServer` 的 gRPC 方法实现现在包含了路由逻辑。当一个请求到达时：
+  - `AggregateFlows` 或 `TraceFlow` 请求会被固定地路由到 `exactQuerier`，该查询器连接到 `flow_metrics` 表。
+  - `QueryHeavyHitters` 请求会被固定地路由到 `sketchQuerier`，该查询器连接到 `heavy_hitters` 表。
+
+这种设计将后端的复杂性对客户端完全屏蔽，客户端只需调用相应的 gRPC 方法，`ns-api` 内部会自动处理与正确数据源的交互。
+
+---
+
+## 4. 核心技术挑战与解决方案
+
+在 Go2NetSpectra 的架构演进过程中，我们遇到并解决了一系列关键的技术挑战，这些解决方案共同构成了框架健壮性和灵活性的基石。
+
+### 挑战一：聚合器隔离与数据串扰
+
+- **问题描述**: 在引入并发聚合器后，`Manager` 将所有 `Task` 和 `Writer` 放在一个扁平的列表中，导致 `exact` 的 `Writer` 错误地尝试处理 `sketch` 的数据，破坏了数据隔离性。
+- **解决方案：引入 `TaskGroup`**
+    通过创建 `TaskGroup` 结构，我们在 `Manager` 层面建立了 `Task` 和 `Writer` 之间的逻辑从属关系。`Manager` 的调度循环被重构为围绕 `TaskGroup` 进行，确保了每个 `Writer` 只从其被分配的 `Task` 集合中拉取数据，从而从根本上解决了数据串扰问题。
+
+### 挑战二：异构数据源的统一查询
+
+- **问题描述**: `ns-api` 服务需要同时服务于对 `exact` 精确数据的查询和对 `sketch` 估算数据的查询，而这两类数据可能存储在不同的数据库甚至不同的表中。
+- **解决方案：多查询器与请求路由**
+    我们在 `ns-api` 中实现了“多查询器”模式。服务在启动时会为每个需要查询的后端（如 `exact` 的 ClickHouse 和 `sketch` 的 ClickHouse）创建独立的 `Querier` 实例。在 gRPC 服务实现中，我们根据被调用的方法（如 `AggregateFlows` vs `QueryHeavyHitters`）将请求分发给对应的 `Querier`，实现了清晰的查询路由。
+
+### 挑战三：多写入器引发的数据竞争
 
 - **问题描述**: 当系统引入多个 `Writer`（如 `gob` 和 `clickhouse`），且它们拥有各自独立的 `snapshot_interval` 时，最初的设计暴露了严重的数据竞争问题。`Snapshot()` 方法在返回数据的同时会重置内部状态。这导致第一个触发快照的 `Writer` 会“偷走”并清空整个测量周期的数据，使得后续的 `Writer` 只能获取到不完整的数据，破坏了数据的一致性。
 
@@ -144,24 +135,6 @@ graph TD
     1.  **接口职责分离**: 我们重新定义了 `model.Task` 接口，将 `Snapshot()` 的职责严格限定为**只读**操作。它现在只返回当前聚合数据的**深拷贝副本**，确保了在任何时间点获取快照都是安全的，且不会影响其他并发操作。
     2.  **引入 `Reset()` 方法**: 我们为 `Task` 接口增加了一个新的 `Reset()` 方法，其唯一职责就是原子性地清空任务的内部状态。
     3.  **全局重置周期**: 在配置文件中引入了全局的 `aggregator.period`。`Manager` 会启动一个独立的 `resetter` 协程，严格按照这个周期调用所有 `Task` 的 `Reset()` 方法。这确保了所有 `Task` 在同一时间点开启新的测量周期，保证了数据的同步和完整性。
-
-### 挑战二：灵活的写入器调度与配置
-
-- **问题描述**: 如何让用户能够灵活地为一组聚合任务配置多个不同的数据写入目标，并且每个目标都可以独立启用、禁用，并拥有自己的写入频率？
-
-- **解决方案：配置驱动的独立调度器**
-    1.  **配置结构化**: 我们将 `writers` 的定义从全局配置移至每个聚合器类型（如 `exact`）的配置块下。每个 `writer` 的定义都包含了 `enabled`、`type` 和 `snapshot_interval` 字段。
-    2.  **`Manager` 作为编排者**: `Manager` 的角色被重新定义。在启动时，它不再关心 `Writer` 的具体创建过程，而是从 `Factory` 获取已创建好的 `Writer` 实例列表。
-    3.  **独立调度**: `Manager` 会遍历这个 `Writer` 列表，为每一个 `Writer` 启动一个专属的 `snapshotter` 协程。每个 `snapshotter` 都使用其对应 `Writer` 的 `GetInterval()` 方法返回的独立周期来驱动自己的定时器，从而实现了完全解耦的、独立的写入调度。
-
-### 挑战三：动态聚合任务的数据库存储
-
-- **问题描述**: `exact` 聚合任务允许用户通过 `key_fields` 配置任意的字段组合（如五元组、源IP、目的端口等）来进行聚合。如何设计一个能够容纳这些动态聚合结果的、统一的数据库表结构，同时保证查询效率？
-
-- **解决方案：“宽表”与动态映射**
-    1.  **通用宽表设计**: 我们在 ClickHouse 中设计了一张名为 `flow_metrics` 的“宽表”。这张表包含了**所有可能**用作聚合键的字段（`SrcIP`, `DstIP`, `SrcPort` 等），并将它们全部设置为 `Nullable`（可为空）。
-    2.  **结构化数据载体**: 我们在 `statistic.Flow` 结构体中增加了一个 `map[string]interface{}` 类型的 `Fields` 字段。当一个 `Flow` 被创建时，构成其聚合键的实际字段和值会被存入这个 `map` 中。
-    3.  **写入时动态映射**: `ClickHouseWriter` 在写入数据时，会遍历 `Flow` 的 `Fields` map，并将其中的值动态地映射到 `flow_metrics` 表对应的列中。对于 `Fields` map 中不存在的字段，数据库将自动填充为 `NULL`。这个方案不仅解决了动态存储的问题，还使得跨不同聚合任务的复杂查询成为可能。
 
 ### 挑战四：ClickHouse 查询的复杂性与正确性
 
@@ -172,7 +145,6 @@ graph TD
     2.  **子查询与两阶段聚合**: 我们的最终查询采用了一个两阶段的聚合模式：
         *   **内层子查询**: 首先，按流的唯一标识（`TaskName` 加上所有可能的键字段）进行 `GROUP BY`。在每个流的分组内，使用 `argMax` 找出该流最新的 `ByteCount` 和 `PacketCount`。
         *   **外层查询**: 然后，对外层查询的结果（即所有流的最新状态集合）进行最终的 `SUM()` 聚合，从而得到准确的总量统计。
-    3.  **语法陷阱**: 在实现过程中，我们还解决了 ClickHouse 的一些语法陷阱，例如 `GROUP BY` 子句中不能包含聚合函数的别名，以及 `SELECT` 子句中非聚合列必须出现在 `GROUP BY` 子句中等问题。
 
 ### 挑战五：Sketch 无锁高并发实现与性能优化
 
@@ -311,6 +283,13 @@ Exact 实现
     3.  **动态构造函数**: `sketch.New` 任务构造函数被重构，它接收整个 `SketchTaskDef` 配置结构。函数内部使用一个 `switch` 语句，根据 `skt_type` 的值来判断应该调用 `statistic.NewCountMin` 还是 `statistic.NewSuperSpread`，并传入各自所需的参数。
 
     这个方案将“选择哪种算法”的决定权完全交给了用户配置，使得 `Task` 层代码保持了极高的通用性和稳定性。未来若要支持第三种 `sketch` 算法，我们只需实现其算法逻辑，并在 `New` 函数的 `switch` 中增加一个新的 `case` 即可，充分体现了框架的灵活性和可扩展性。
+
+### 挑战七：高流量场景下的内存分配优化
+
+- **问题描述**: 在对 `sketch` 任务进行性能剖析（profiling）时，我们发现 `Insert` 的热路径上存在严重的性能瓶颈。每一次数据包处理都需要为 `flow` 标签和 `element` 标签创建新的 `[]byte` 切片。在每秒处理数十万甚至上百万数据包的场景下，这产生了海量的内存分配，给 Go 的垃圾回收器（GC）带来了巨大压力，导致 GC 频繁暂停（Stop-the-World），显著降低了系统的整体吞吐量。
+
+- **解决方案：引入 `sync.Pool` 缓存临时对象**
+    我们利用 Go 标准库中的 `sync.Pool` 来创建一个临时对象的缓存池。`flow` 和 `element` 的 `[]byte` 切片不再在每次调用时重新分配，而是从池中获取（`Get`）。当处理完毕后，这些切片会通过 `defer` 语句被归还（`Put`）到池中，以供下一次处理复用。这个简单的改动极大地减少了 `Insert` 路径上的内存分配次数，显著降低了 GC 压力，从而将 CPU 资源更多地用于核心计算逻辑，最终使 `sketch` 任务的插入性能获得了数量级的提升。
 
 ---
 

@@ -79,37 +79,28 @@ Go2NetSpectra 是一个基于 Go 语言构建的、支持分布式的、高性�
   * **目标**: 验证核心数据处理能力。
   * **核心交付物**:
       * **命令行工具 `pcap-analyzer`**: 可读取 pcap 文件，并启动高性能分析引擎。
-      * **可插拔的引擎架构 (`Manager` -> `Task`)**: 确立了三层引擎架构。`Manager` 作为并发调度层，`Task` 作为具体的业务逻辑执行层。通过配置文件中的 `type` 字段，可以动态创建不同类型的聚合任务，实现了高度的可扩展性。
-      * **高性能并发设计**: `Manager` 内部采用 **Worker Pool + Channel** 模型，将数据包的高效转换和分发给多个 `Task` 的过程并行化，充分利用多核CPU资源。
-      * **健壮的数据一致性保证**: 通过在 `Manager` 层实现的**优雅停机（Graceful Shutdown）**机制，以及**并发安全的只读快照**和**周期性重置**机制，确保了在处理结束时，所有缓冲数据都被完整统计，从架构上杜绝了数据丢失和数据不一致的风险。
-      * **只读快照与周期性重置**: `Task` 的 `Snapshot()` 方法现在提供数据的只读副本，而内部状态的重置则由 `Manager` 根据全局 `period` 统一触发 `Task.Reset()`，确保了数据的一致性和准确性。
-      * **灵活的写入器配置**: 通过 `model.Writer` 接口和配置驱动，支持将数据写入多种目标（如 `gob` 文件、`text` 文件、ClickHouse 数据库），且每个写入器可独立配置启用状态和快照频率。
-      * **多功能、高性能 Sketch 算法框架**: 实现了统一的 `sketch` 聚合器，可通过配置动态选择底层算法。所有算法均经过**并发优化（如无锁操作）**，以保证在高吞吐量下的性能。目前已支持：
-        * **Count-Min Sketch**: 用于高频项（Heavy Hitter）检测。
-        * **SuperSpread**: 用于高基数项（Super Spreader）检测。
+      * **并发聚合引擎**: 引擎现在可以根据 `aggregator.types` 配置，**同时加载并运行多种聚合器**（如 `exact` 和 `sketch`）。这使得复杂的联动分析成为可能。
+      * **插件化架构 (`Factory` + `TaskGroup`)**: 确立了三层引擎架构。`Manager` 作为并发调度层，`Task` 作为具体的业务逻辑执行层。通过 `TaskGroup` 结构，将特定聚合器类型的所有 `Task` 和 `Writer` 绑定在一起，确保了数据处理的隔离性。
+      * **高性能并发设计**: `Manager` 内部采用 **Worker Pool + Channel** 模型，将数据包高效地分发给所有 `Task`。`exact` 任务通过**分片并发**降低锁竞争，`sketch` 任务则通过**无锁原子操作**实现极致性能。
+      * **健壮的数据一致性保证**: 通过**优雅停机（Graceful Shutdown）**机制、**只读原子快照**和**周期性重置**机制，确保了数据在每个测量周期内的完整性和准确性。
+      * **灵活的写入器配置**: 每个聚合器组都可以独立配置其 `Writer`，每个 `Writer` 也可以拥有独立的写入频率。
 
-**里程碑 2: 实时数据流打通 (Alpha) - ✅ 部分完成**
+**里程碑 2: 实时数据流打通 (Alpha) - ✅ 已完成**
 
   * **目标**: 实现端到端的实时流量监控原型。
   * **核心交付物**:
-      * **统一的 `ns-probe` 命令行工具**: 使用 `--mode` 参数，同时支持作为探针实时抓包 (`probe`) 和作为订阅者验证 (`sub`) 的能力。
-      * **实时抓包与发布**: `probe` 模式能够从指定网卡抓包，并将解析后的数据包通过 **Protobuf** 序列化后发布到 **NATS** 消息队列。
-      * **实时消费引擎 `ns-engine`**: 实现了 `StreamAggregator`，能够连接到 NATS 并订阅数据。它将接收到的数据送入 `Manager` 的并发处理流水线中。
-      * **模块化封装**: `probe` 和 `engine` 的核心逻辑被清晰地封装在各自的包中，职责分明。
-      * **ClickHouse 集成**: `ns-engine` 已支持将实时聚合结果写入 ClickHouse 数据库。
+      * **统一的 `ns-probe` 命令行工具**: 支持实时抓包 (`probe`) 和 NATS 消息验证 (`sub`)。
+      * **实时数据管道**: `probe` 能够从网卡抓包，通过 **Protobuf** 序列化后发布到 **NATS**。`ns-engine` 则订阅数据并送入处理流水线。
+      * **ClickHouse 集成**: `ns-engine` 已支持将 `exact` 和 `sketch` 的聚合结果写入不同的 ClickHouse 表中。
 
-  * **下一步**:
-      * 完善 `ns-engine`，使其能够将实时聚合的结果通过 `Writer` 写入存储（初期可先写入本地文件）。
-      * 为未来的数据持久化和可视化搭建基础环境（如 ClickHouse, Grafana）。
-
-**里程碑 3: API 服务与产品化 (Beta) - ✅ 基本完成**
+**里程碑 3: API 服务与产品化 (Beta) - ✅ 已完成**
 
   * **目标**: 提供数据查询能力，并使系统易于部署和观察。
   * **核心交付物**:
-      * **gRPC 核心 API**: `ns-api` 服务已升级为 gRPC 优先。提供了 `AggregateFlows`, `TraceFlow`, `QueryHeavyHitters` 等多个高性能查询接口。
-      * **Grafana 兼容端点**: `ns-api` 保留了 HTTP 端点，专门用于与 Grafana 的 JSON API 数据源进行集成。
+      * **gRPC 核心 API**: `ns-api` 服务提供 `AggregateFlows`, `TraceFlow`, `QueryHeavyHitters` 等多个高性能查询接口。
+      * **智能查询路由**: `ns-api` 能够根据配置初始化多个 `Querier` 实例，并将 gRPC 请求路由到正确的数据源（例如，`AggregateFlows` 查询 `exact` 的数据，`QueryHeavyHitters` 查询 `sketch` 的数据）。
       * **容器化部署**: 提供了 `docker-compose.yml`，可以一键启动包括 `nats`, `clickhouse`, `ns-engine`, `ns-api`, 和 `grafana` 在内的完整后端服务。
-      * **预置仪表盘**: 提供了一个基础的 Grafana 仪表盘，用于展示核心流量指标。
+      * **预置仪表盘**: 提供了一个基础的 Grafana 仪表盘。
 
   * **下一步**:
       * 为 `ns-api` 增加更完善的日志、监控和错误处理机制。

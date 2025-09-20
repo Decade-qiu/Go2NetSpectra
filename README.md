@@ -1,21 +1,21 @@
 # Go2NetSpectra
 
-[![Go](https://img.shields.io/badge/go-1.22-blue.svg)](https://go.dev/) [![gopacket](https://img.shields.io/badge/gopacket-1.1.19-blue.svg)](https://github.com/google/gopacket) [![NATS](https://img.shields.io/badge/NATS-2.11-green.svg)](https://nats.io/) [![Protobuf](https://img.shields.io/badge/Protobuf-v3-blue.svg)](https://protobuf.dev/) [![Docker](https://img.shields.io/badge/docker-20.10%2B-blue)](https://www.docker.com/)
+[![Go](https://img.shields.io/badge/go-1.25-blue.svg)](https://go.dev/) [![gopacket](https://img.shields.io/badge/gopacket-1.1.19-blue.svg)](https://github.com/google/gopacket) [![NATS](https://img.shields.io/badge/NATS-2.11-green.svg)](https://nats.io/) [![Protobuf](https://img.shields.io/badge/Protobuf-v3-blue.svg)](https://protobuf.dev/) [![Docker](https://img.shields.io/badge/docker-20.10%2B-blue)](https://www.docker.com/)
 
 **Go2NetSpectra** is a high-performance, distributed network traffic monitoring and analysis framework written in Go. It provides a powerful platform for network engineers, security analysts, and SREs to gain deep, multi-dimensional insights into network traffic in real-time. By leveraging a high-speed data pipeline and a flexible, pluggable aggregation engine, Go2NetSpectra is built to scale from simple network monitoring to complex security threat detection.
 
 ### Core Features
 
-- **Dual-Mode Architecture**: Supports both **real-time** traffic monitoring from live interfaces and **offline** analysis of `.pcap` files with a unified core engine.
-- **Pluggable Aggregation Engine**: The engine core uses a factory pattern to dynamically load aggregation tasks. This allows you to easily add new analysis algorithms (e.g., exact counting, HyperLogLog, etc.) without modifying the core code.
-- **High-Performance Design**: Built from the ground up for performance, utilizing Go's concurrency model (worker pools, channels), lock-free optimizations (sharding, atomic snapshots), and efficient data serialization (Protobuf).
-- **Decoupled & Scalable**: All major components (`probe`, `engine`, `api`) are decoupled and designed to be horizontally scalable, making the system suitable for high-volume, distributed environments.
+- **Hybrid Analysis Engine**: Simultaneously runs multiple aggregator types. This allows the system to perform **100% accurate accounting** (`exact` mode) and **high-performance probabilistic analysis** (`sketch` mode) *at the same time*, enabling powerful, data-driven workflows (e.g., use `sketch` to find anomalies, then use `exact` to get precise details).
+- **Pluggable Aggregation Algorithms**: The `sketch` aggregator is a micro-framework that dynamically loads different estimation algorithms based on configuration. Currently supports **Count-Min Sketch** (for heavy hitters) and **SuperSpread** (for cardinality/super-spreaders).
+- **High-Performance by Design**: Built from the ground up for performance, utilizing Go's concurrency model (worker pools), lock-free optimizations (atomic operations in sketches), and efficient data serialization (Protobuf).
+- **Decoupled & Scalable**: All major components (`probe`, `engine`, `api`) are decoupled via a message bus and are designed to be horizontally scalable, making the system suitable for high-volume, distributed environments.
 
 ---
 
 ## Architecture Overview
 
-The project is centered around a highly flexible, three-tier engine architecture that is shared by both offline and real-time modes.
+The project is centered around a highly flexible, multi-stage data pipeline.
 
 ```mermaid
 graph TD
@@ -26,39 +26,39 @@ graph TD
         Probe -- Protobuf over NATS --> NATS[(NATS Message Bus)]
     end
 
-    subgraph "Control & Processing Plane"
+    subgraph "Processing Plane (ns-engine)"
         direction TB
-        NATS -- Protobuf --> Engine_Realtime(ns-engine)
-        Analyzer -- Go Channel --> Engine_Offline(pcap-analyzer)
+        NATS -- Protobuf --> Manager(Manager: Worker Pool)
         
-        subgraph "Engine Core (Shared by both modes)"
-            direction LR
-            Input[Data In] --> Manager(Manager: Worker Pool)
-            Manager -- fan-out --> Task1(Task 1)
-            Manager -- fan-out --> Task2(Task 2)
-            Manager -- fan-out --> TaskN(...)
+        subgraph "Aggregator Group 1: Sketch"
+            Manager -- fan-out --> Task_Sketch1(Task: Count-Min)
+            Manager -- fan-out --> Task_Sketch2(Task: SuperSpread)
         end
 
-        Task1 -- snapshot --> Storage
-        Task2 -- snapshot --> Storage
-        TaskN -- snapshot --> Storage
-        Storage[(Storage: Files, ClickHouse)]
+        subgraph "Aggregator Group 2: Exact"
+            Manager -- fan-out --> Task_Exact1(Task: Per-Flow Accounting)
+        end
+
+        Task_Sketch1 -- snapshot --> Storage_Sketch(Storage: heavy_hitters)
+        Task_Sketch2 -- snapshot --> Storage_Sketch
+        Task_Exact1 -- snapshot --> Storage_Exact(Storage: flow_metrics)
     end
 
-    subgraph "Query Plane"
-        API[ns-api] -- SQL --> Storage
+    subgraph "Query Plane (ns-api)"
+        API[ns-api]
         User[User/Client] -- gRPC --> API
+        API -- QueryHeavyHitters --> Storage_Sketch
+        API -- AggregateFlows/TraceFlow --> Storage_Exact
     end
 
     style NATS fill:#FFB6C1,stroke:#333,stroke-width:2px
     style Manager fill:#ADD8E6,stroke:#333,stroke-width:2px
     style API fill:#90EE90,stroke:#333,stroke-width:2px
 ```
-- **`ns-probe`**: A lightweight, high-performance probe that captures live traffic from a network interface. It parses packet metadata and publishes it to NATS. It can also be configured to persist raw packets locally for backup or replay.
-- **`pcap-analyzer`**: A command-line tool for offline analysis. It reads packets from `.pcap` files and feeds them directly into the core engine, bypassing the NATS pipeline.
-- **`ns-engine`**: The heart of the system. It subscribes to the data stream from NATS and orchestrates a pool of concurrent workers to process and aggregate the traffic data in real-time using either exact counting or sketch algorithms (like Count-Min Sketch).
-- **`ns-api`**: A high-performance **gRPC API server** that provides query capabilities over the aggregated data. It offers endpoints for exact aggregations, flow tracing, and heavy-hitter analysis from sketch tasks. It also exposes a limited HTTP endpoint for Grafana integration.
-- **Engine Core**: The shared brain of the system, featuring a `Manager` that schedules and a set of `Task` plugins that execute the actual aggregation logic.
+- **`ns-probe`**: A lightweight, high-performance probe that captures live traffic, parses packet metadata, and publishes it to NATS.
+- **`ns-engine`**: The heart of the system. It subscribes to the data stream and orchestrates concurrent processing. Its `Manager` fans out packets to all active `Task` instances across different aggregator groups (`exact`, `sketch`).
+- **`ns-api`**: A high-performance **gRPC API server** that provides query capabilities. It intelligently routes requests to the correct data source, allowing users to query for exact flow metrics or probabilistic heavy-hitter results from a single endpoint.
+- **Engine Core**: The shared brain of the system, featuring a `Manager` that schedules tasks and a `Factory` that dynamically loads aggregator plugins based on configuration.
 
 For a more detailed explanation of the architecture, configuration files (`config.yaml` vs `config.docker.yaml`), and how to run validation tests, see [`doc/technology.md`](doc/technology.md) and [`doc/build.md`](doc/build.md).
 
@@ -72,7 +72,7 @@ This guide provides two primary ways to run the project. Choose the one that bes
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.25+
 - `protoc` Compiler
 - Docker and Docker Compose
 
