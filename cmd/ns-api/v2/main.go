@@ -6,11 +6,13 @@ import (
 	"Go2NetSpectra/internal/query"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
@@ -38,8 +40,9 @@ type TimeSeriesResponse struct {
 // ---- gRPC service implementation ----
 type QueryServiceServer struct {
 	v1.UnimplementedQueryServiceServer
-	querier query.Querier
-	cfg     *config.Config
+	exactQuerier  query.Querier
+	sketchQuerier query.Querier
+	cfg           *config.Config
 }
 
 func (s *QueryServiceServer) HealthCheck(ctx context.Context, req *v1.HealthCheckRequest) (*v1.HealthCheckResponse, error) {
@@ -50,28 +53,41 @@ func (s *QueryServiceServer) HealthCheck(ctx context.Context, req *v1.HealthChec
 func (s *QueryServiceServer) SearchTasks(ctx context.Context, req *v1.SearchTasksRequest) (*v1.SearchTasksResponse, error) {
 	log.Println("Received SearchTasks request")
 	var taskNames []string
+	// This can be expanded to include sketch tasks if needed
 	for _, task := range s.cfg.Aggregator.Exact.Tasks {
+		taskNames = append(taskNames, task.Name)
+	}
+	for _, task := range s.cfg.Aggregator.Sketch.Tasks {
 		taskNames = append(taskNames, task.Name)
 	}
 	return &v1.SearchTasksResponse{TaskNames: taskNames}, nil
 }
 
 func (s *QueryServiceServer) AggregateFlows(ctx context.Context, req *v1.AggregationRequest) (*v1.QueryTotalCountsResponse, error) {
+	if s.exactQuerier == nil {
+		return nil, fmt.Errorf("exact aggregator is not configured, cannot perform aggregation query")
+	}
 	log.Printf("Received AggregateFlows request for task: %s, end: %v", req.TaskName, req.EndTime)
-	return s.querier.AggregateFlows(ctx, req)
+	return s.exactQuerier.AggregateFlows(ctx, req)
 }
 
 func (s *QueryServiceServer) TraceFlow(ctx context.Context, req *v1.TraceFlowRequest) (*v1.TraceFlowResponse, error) {
+	if s.exactQuerier == nil {
+		return nil, fmt.Errorf("exact aggregator is not configured, cannot perform trace query")
+	}
 	log.Printf("Received TraceFlow request for task: %s, flow: %v, end: %v", req.TaskName, req.FlowKeys, req.EndTime)
-	result, err := s.querier.TraceFlow(ctx, req)
+	result, err := s.exactQuerier.TraceFlow(ctx, req)
 	var resultProto v1.TraceFlowResponse
 	resultProto.Lifecycle = result
 	return &resultProto, err
 }
 
 func (s *QueryServiceServer) QueryHeavyHitters(ctx context.Context, req *v1.HeavyHittersRequest) (*v1.HeavyHittersResponse, error) {
+	if s.sketchQuerier == nil {
+		return nil, fmt.Errorf("sketch aggregator is not configured, cannot perform heavy hitters query")
+	}
 	log.Printf("Received QueryHeavyHitters request for task: %s, type: %v, end: %v, limit: %d", req.TaskName, req.Type, req.EndTime, req.Limit)
-	return s.querier.QueryHeavyHitters(ctx, req)
+	return s.sketchQuerier.QueryHeavyHitters(ctx, req)
 }
 
 func main() {
@@ -81,35 +97,44 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	var chCfg *config.ClickHouseConfig
-	if cfg.Aggregator.Type == "exact" {
+	var exactQuerier, sketchQuerier query.Querier
+
+	// Create querier for the exact aggregator if it's active
+	if slices.Contains(cfg.Aggregator.Types, "exact") {
 		for _, writerDef := range cfg.Aggregator.Exact.Writers {
 			if writerDef.Enabled && writerDef.Type == "clickhouse" {
-				chCfg = &writerDef.ClickHouse
+				log.Println("Found enabled ClickHouse writer for exact aggregator.")
+				exactQuerier, err = query.NewClickHouseQuerier(writerDef.ClickHouse)
+				if err != nil {
+					log.Fatalf("Failed to create exact querier: %v", err)
+				}
 				break
 			}
 		}
-	} else if cfg.Aggregator.Type == "sketch" {
+	}
+
+	// Create querier for the sketch aggregator if it's active
+	if slices.Contains(cfg.Aggregator.Types, "sketch") {
 		for _, writerDef := range cfg.Aggregator.Sketch.Writers {
 			if writerDef.Enabled && writerDef.Type == "clickhouse" {
-				chCfg = &writerDef.ClickHouse
+				log.Println("Found enabled ClickHouse writer for sketch aggregator.")
+				sketchQuerier, err = query.NewClickHouseQuerier(writerDef.ClickHouse)
+				if err != nil {
+					log.Fatalf("Failed to create sketch querier: %v", err)
+			}
 				break
 			}
 		}
 	}
 
-	if chCfg == nil {
-		log.Fatalf("No enabled ClickHouse writer found in config. API server cannot start.")
-	}
-
-	querier, err := query.NewClickHouseQuerier(*chCfg)
-	if err != nil {
-		log.Fatalf("Failed to create querier: %v", err)
+	if exactQuerier == nil && sketchQuerier == nil {
+		log.Fatalf("No enabled ClickHouse writer found for any active aggregator. API server cannot start.")
 	}
 
 	service := &QueryServiceServer{
-		querier: querier,
-		cfg:     cfg,
+		exactQuerier:  exactQuerier,
+		sketchQuerier: sketchQuerier,
+		cfg:           cfg,
 	}
 
 	// Run gRPC server
