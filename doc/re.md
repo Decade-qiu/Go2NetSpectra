@@ -99,6 +99,7 @@ Go2NetSpectra 是一个基于 Go 语言构建的、支持分布式的、高性�
   * **核心交付物**:
       * **gRPC 核心 API**: `ns-api` 服务提供 `AggregateFlows`, `TraceFlow`, `QueryHeavyHitters` 等多个高性能查询接口。
       * **智能查询路由**: `ns-api` 能够根据配置初始化多个 `Querier` 实例，并将 gRPC 请求路由到正确的数据源（例如，`AggregateFlows` 查询 `exact` 的数据，`QueryHeavyHitters` 查询 `sketch` 的数据）。
+      * **实时预警系统**: 新增 `Alerter` 和 `Notifier` 模块。聚合任务现在可以生成事件，由 `Alerter` 根据规则进行判断，并通过 `Notifier` (如 Webhook) 发送实时告警，满足了 `FR-18` 需求。
       * **容器化部署**: 提供了 `docker-compose.yml`，可以一键启动包括 `nats`, `clickhouse`, `ns-engine`, `ns-api`, 和 `grafana` 在内的完整后端服务。
       * **预置仪表盘**: 提供了一个基础的 Grafana 仪表盘。
 

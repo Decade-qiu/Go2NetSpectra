@@ -27,9 +27,9 @@
 - **`model.Writer`**: 定义了数据写入器的标准行为，负责将 `Task` 的快照持久化。
 - **`factory.TaskGroup`**: 这是一个关键的结构，它将一组逻辑相关的 `Task` 和为它们服务的 `Writer` 绑定在一起。
 
-### 2.2. 核心实现：并发调度与隔离执行
+### 2.2. 核心实现：并发调度、隔离执行与实时预警
 
-引擎的工作流程被清晰地划分为多个层次，确保了职责的单一和高度的解耦。
+引擎的工作流程被清晰地划分为多个层次，确保了职责的单一和高度的解耦，并在数据处理链路中融入了实时预警能力。
 
 ```mermaid
 graph TD
@@ -41,19 +41,26 @@ graph TD
             direction LR
             B -- fan-out --> Task_Sketch1(Task: Count-Min)
             Task_Sketch1 -- snapshot --> Writer_Sketch(Writer)
+            Task_Sketch1 -- generates --> AlertMsg(Alert Messages)
         end
 
         subgraph "Aggregator Group 2: Exact"
             direction LR
             B -- fan-out --> Task_Exact1(Task: Per-Flow Accounting)
             Task_Exact1 -- snapshot --> Writer_Exact(Writer)
+            Task_Exact1 -- generates --> AlertMsg
         end
+
+        AlertMsg --> B
+        B --> Alerter(Alerter)
+        Alerter --> Notifier(e.g. Webhook)
     end
 ```
 
 - **数据接入层**: `StreamAggregator` 从 NATS 消费数据，并将其送入 `Manager` 的输入通道。
-- **并发调度层 (`Manager`)**: 引擎的“大脑”。它内部维护一个 **Worker Pool**，从输入通道消费数据包，然后将数据包**扇出（Fan-out）给所有聚合器组中的所有 `Task` 实例**。
+- **并发调度层 (`Manager`)**: 引擎的“大脑”。它内部维护一个 **Worker Pool**，从输入通道消费数据包，然后将数据包**扇出（Fan-out）给所有聚合器组中的所有 `Task` 实例**。同时，它还扮演着消息总线的角色，从所有 `Task` 收集预警消息，并将它们路由到 `Alerter` 模块进行集中处理。
 - **隔离执行层 (`TaskGroup`)**: `Manager` 不再直接管理 `Task` 和 `Writer` 的扁平列表，而是管理一个 `[]TaskGroup`。当启动时，`Manager` 会遍历每个 `TaskGroup`，并为该组内的每个 `Writer` 启动一个专属的 `snapshotter` 协程。**至关重要的是，这个协程只会被传入其所在 `TaskGroup` 内部的 `Task` 列表**。这确保了 `exact` 的 `Writer` 只会处理 `exact` 的 `Task`，`sketch` 的 `Writer` 只会处理 `sketch` 的 `Task`，彻底解决了数据串扰的问题。
+- **实时预警层 (`Alerter` & `Notifier`)**: 这是实现主动洞察的关键。`Task` 在处理数据时可以生成结构化的预警消息（例如，检测到新的大流量、可疑的扫描行为等）。这些消息通过专属通道被 `Manager` 异步收集，并派发给 `Alerter`。`Alerter` 根据配置文件中的规则（如阈值、频率等）对消息进行评估，一旦满足触发条件，便会通过 `Notifier` 插件（如 Webhook、日志、邮件等）将结构化的警报实时发送出去，形成从“发现”到“告警”的完整闭环。
 
 ### 2.3. 扩展性亮点：插件式的聚合器工厂
 
