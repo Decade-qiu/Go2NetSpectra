@@ -209,6 +209,94 @@ func (t *Task) Reset() {
 	wait.Wait() // Wait until all shards are reset
 }
 
+// AlerterMsg evaluates rules against the task's aggregated data and returns a markdown string if triggered.
+func (t *Task) AlerterMsg(rules []config.AlerterRule) string {
+	// Perform a snapshot to get the latest data for evaluation.
+	snapshotData, ok := t.Snapshot().(statistic.SnapshotData)
+	if !ok {
+		log.Printf("ERROR: AlerterMsg in exact task received unexpected snapshot type: %T", t.Snapshot())
+		return ""
+	}
+
+	// Calculate total metrics from the snapshot.
+	var totalPackets uint64
+	var totalBytes uint64
+	flowCount := 0
+	for _, shard := range snapshotData.Shards {
+		for _, flow := range shard.Flows {
+			totalPackets += flow.PacketCount
+			totalBytes += flow.ByteCount
+			flowCount++
+		}
+	}
+
+	var triggeredMessages []string
+
+	for _, rule := range rules {
+		if rule.TaskName != t.name {
+			continue
+		}
+
+		var triggered bool
+		var currentValue float64
+		var unit string
+
+		switch rule.Metric {
+		case "total_packets":
+			currentValue = float64(totalPackets)
+			unit = "packets"
+			if check(currentValue, rule.Threshold, rule.Operator) {
+				triggered = true
+			}
+		case "total_bytes":
+			currentValue = float64(totalBytes)
+			unit = "bytes"
+			if check(currentValue, rule.Threshold, rule.Operator) {
+				triggered = true
+			}
+		case "total_flows":
+			currentValue = float64(flowCount)
+			unit = "flows"
+			if check(currentValue, rule.Threshold, rule.Operator) {
+				triggered = true
+			}
+		}
+
+		if triggered {
+			msg := fmt.Sprintf("<h3>Alert: %s</h3>"+
+				"<ul>"+
+				"<li><b>Task:</b> <code>%s</code></li>"+
+				"<li><b>Metric:</b> <code>%s</code></li>"+
+				"<li><b>Condition:</b> <code>%s %.2f</code></li>"+
+				"<li><b>Observed Value:</b> <code>%.0f %s</code></li>"+
+				"</ul>",
+				rule.Name, rule.TaskName, rule.Metric, rule.Operator, rule.Threshold, currentValue, unit)
+			triggeredMessages = append(triggeredMessages, msg)
+		}
+	}
+
+	return strings.Join(triggeredMessages, "<br><hr><br>")
+}
+
+// check compares a value against a threshold based on an operator.
+func check(value, threshold float64, operator string) bool {
+	switch operator {
+	case ">":
+		return value > threshold
+	case "<":
+		return value < threshold
+	case "=":
+		return value == threshold
+	case ">=":
+		return value >= threshold
+	case "<=":
+		return value <= threshold
+	default:
+		log.Printf("Warning: unknown operator '%s' in alerter rule", operator)
+		return false
+	}
+}
+
 // Empty
 // Just to satisfy the interface
 func (t *Task) Query(flow []byte) uint64 {

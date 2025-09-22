@@ -6,6 +6,7 @@ import (
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
 	"encoding/binary"
+	"fmt"
 	"log"
 	"net"
 	"strconv"
@@ -178,6 +179,83 @@ func (t *Task) Snapshot() any {
 // Reset clears the internal state of the task, preparing for a new measurement period.
 func (t *Task) Reset() {
 	t.sketch.Reset()
+}
+
+func (t *Task) AlerterMsg(rules []config.AlerterRule) string {
+	// Perform a snapshot to get the latest data for evaluation.
+	snapshotData, ok := t.Snapshot().(statistic.HeavyRecord)
+	if !ok {
+		log.Printf("ERROR: AlerterMsg in sketch task received unexpected snapshot type: %T", t.sketch.HeavyHitters())
+		return ""
+	}
+
+	var triggeredMessages []string
+
+	for _, rule := range rules {
+		if rule.TaskName != t.name {
+			continue
+		}
+
+		var hitters []string
+		switch rule.Metric {
+		case "heavy_hitter_count":
+			for _, hitter := range snapshotData.Count {
+				if check(float64(hitter.Count), rule.Threshold, rule.Operator) {
+					hitters = append(hitters, fmt.Sprintf("<tr><td><code>%s</code></td><td>%d</td></tr>", t.DecodeFlow(hitter.Flow, t.flowFields), hitter.Count))
+				}
+			}
+		case "heavy_hitter_size":
+			for _, hitter := range snapshotData.Size {
+				if check(float64(hitter.Size), rule.Threshold, rule.Operator) {
+					hitters = append(hitters, fmt.Sprintf("<tr><td><code>%s</code></td><td>%d bytes</td></tr>", t.DecodeFlow(hitter.Flow, t.flowFields), hitter.Size))
+				}
+			}
+		case "super_spreader_spread":
+			if snapshotData.Size == nil {
+				for _, spreader := range snapshotData.Count {
+					if check(float64(spreader.Count), rule.Threshold, rule.Operator) {
+						hitters = append(hitters, fmt.Sprintf("<tr><td><code>%s</code></td><td>%d</td></tr>", t.DecodeFlow(spreader.Flow, t.flowFields), spreader.Count))
+					}
+				}
+			}
+		}
+
+		if len(hitters) > 0 {
+			itemsTable := fmt.Sprintf("<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\">"+
+				"<tr><th>Flow/Source</th><th>Value</th></tr>%s</table>", strings.Join(hitters, ""))
+
+			msg := fmt.Sprintf("<h3>Alert: %s</h3>"+
+				"<ul>"+
+				"<li><b>Task:</b> <code>%s</code></li>"+
+				"<li><b>Metric:</b> <code>%s</code></li>"+
+				"<li><b>Condition:</b> <code>%s %.2f</code></li>"+
+				"</ul>"+
+				"<p><b>Triggering Items:</b></p>%s",
+				rule.Name, rule.TaskName, rule.Metric, rule.Operator, rule.Threshold, itemsTable)
+			triggeredMessages = append(triggeredMessages, msg)
+		}
+	}
+
+	return strings.Join(triggeredMessages, "<br><hr><br>")
+}
+
+// check compares a value against a threshold based on an operator.
+func check(value, threshold float64, operator string) bool {
+	switch operator {
+	case ">":
+		return value > threshold
+	case "<":
+		return value < threshold
+	case "=":
+		return value == threshold
+	case ">=":
+		return value >= threshold
+	case "<=":
+		return value <= threshold
+	default:
+		log.Printf("Warning: unknown operator '%s' in alerter rule", operator)
+		return false
+	}
 }
 
 // generateFlowAndElem creates Flow and Element keys based on the configured fields.

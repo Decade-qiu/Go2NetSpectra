@@ -1,5 +1,7 @@
 package model
 
+import "Go2NetSpectra/internal/config"
+
 // Task defines a single, self-contained aggregation task (e.g., exact count, sketch, etc.).
 // This is the interface for the "execution layer".
 type Task interface {
@@ -10,4 +12,5 @@ type Task interface {
 	Query(flow []byte) uint64
 	Fields() []string
 	DecodeFlowFunc() func(flow []byte, fields []string) string
+	AlerterMsg(rules []config.AlerterRule) string
 }
