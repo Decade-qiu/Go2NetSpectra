@@ -105,11 +105,39 @@ type APIConfig struct {
 	HttpListenAddr string `yaml:"http_listen_addr"`
 }
 
+// AlerterRule defines a single condition for triggering an alert.
+type AlerterRule struct {
+	Name      string  `yaml:"name"`
+	TaskName  string  `yaml:"task_name"`
+	Metric    string  `yaml:"metric"`    // e.g., "heavy_hitter_count", "super_spreader_spread", "total_bytes"
+	Operator  string  `yaml:"operator"`  // e.g., ">", "<", "="
+	Threshold float64 `yaml:"threshold"`
+}
+
+// AlerterConfig holds all configuration for the alerter component.
+type AlerterConfig struct {
+	Enabled       bool          `yaml:"enabled"`
+	CheckInterval string        `yaml:"check_interval"`
+	Rules         []AlerterRule `yaml:"rules"`
+}
+
+// SMTPConfig holds the configuration for the email notifier.
+type SMTPConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	From     string `yaml:"from"`
+	To       string `yaml:"to"` // Comma-separated list of recipients
+}
+
 // Config is the top-level configuration struct for the entire application.
 type Config struct {
 	Aggregator AggregatorConfig `yaml:"aggregator"`
 	Probe      ProbeConfig      `yaml:"probe"`
 	API        APIConfig        `yaml:"api"`
+	Alerter    AlerterConfig    `yaml:"alerter"`
+	SMTP       SMTPConfig       `yaml:"smtp"`
 }
 
 // LoadConfig reads the configuration from a YAML file and returns a Config struct.

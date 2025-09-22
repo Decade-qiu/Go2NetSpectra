@@ -4,6 +4,53 @@ api:
   grpc_listen_addr: ":50051"
   http_listen_addr: ":8080"
 
+# Probe settings
+probe:
+  # NATS server URL for the probe to connect to.
+  nats_url: "nats://localhost:4222"
+  # NATS subject to publish raw packet data to.
+  subject: "gons.packets.raw"
+  # Persistence settings for storing raw packets to disk.
+  persistence:
+    enabled: false
+    path: "test/publish" # File path for persisted packets
+    num_workers: 4             # Number of goroutines for writing
+    channel_buffer_size: 10000 # Size of the buffered channel for persistence
+    encoding: "pcap" # Encoding format: "text", "gob", or "pcap"
+
+# Alerter Configuration
+alerter:
+  enabled: true
+  check_interval: "300s" # Check for alerts every 30 seconds
+  rules:
+    - name: "Potential_DDoS_Source_Detected"
+      task_name: "ss_src_dst"
+      metric: "super_spreader_spread"
+      operator: ">"
+      threshold: 5000
+
+    - name: "High_Frequency_Flow_Detected"
+      task_name: "per_src_ip"
+      metric: "total_packets"
+      operator: ">"
+      threshold: 10000
+
+    - name: "Total_Traffic_Spike"
+      task_name: "per_five_tuple"
+      metric: "total_bytes"
+      operator: ">"
+      threshold: 104857600 # 100 MB
+
+# SMTP Configuration for Email Notifications
+# IMPORTANT: Replace with your actual SMTP server details.
+smtp:
+  host: "smtp.qq.com"
+  port: 587
+  username: "zj-qiu@foxmail.com"
+  password: "rukwdywzbjlpdbhj" # Use an app-specific password if required
+  from: "zj-qiu@foxmail.com"
+  to: "3101346700@qq.com" # Comma-separated list of recipients
+
 # Configuration file for the network traffic aggregator system.
 aggregator:
   # Type of aggregator to use. Currently only "exact" is supported.
@@ -25,12 +72,12 @@ aggregator:
     # All tasks within this block share this snapshot interval and writer list.
     writers:
       - type: "text"
-        enabled: false
+        enabled: true
         snapshot_interval: "60s"
         text:
           root_path: "test/res"
       - type: "clickhouse"
-        enabled: true
+        enabled: false
         snapshot_interval: "60s"
         clickhouse:
           host: "azure.clickhouse.cloud"
@@ -41,29 +88,21 @@ aggregator:
           cloud: true
     # List of specific aggregation tasks to run.
     tasks:
-        - name: "ss_dst_src"
+        - name: "ss_src_dst"
           skt_type: 1
-          flow_fields: ["DstIP"]
-          element_fields: ["SrcIP"]
+          flow_fields: ["SrcIP"]
+          element_fields: ["DstIP"]
           width: 32768
           depth: 2
           count_thereshold: 36
           m : 128
           size: 5
           b: 1.08
-          base: 0.5  
+          base: 0.5
         - name: "cm_src_left"
           skt_type: 0
           flow_fields: ["SrcIP"]
           element_fields: ["DstIP", "SrcPort", "DstPort", "Protocol"]
-          width: 32768
-          depth: 2
-          size_thereshold: 4096000
-          count_thereshold: 4096
-        - name: "cm_all_none"
-          skt_type: 0
-          flow_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
-          element_fields: []
           width: 32768
           depth: 2
           size_thereshold: 4096000
@@ -74,12 +113,12 @@ aggregator:
     # All tasks within this block share this snapshot interval and writer list.
     writers:
       - type: "gob"
-        enabled: false
+        enabled: true
         snapshot_interval: "3600s"
         gob:
           root_path: "test/res"
       - type: "clickhouse"
-        enabled: true
+        enabled: false
         snapshot_interval: "120s"
         clickhouse:
           host: "azure.clickhouse.cloud"
@@ -108,17 +147,3 @@ aggregator:
         - name: "per_five_tuple"
           key_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
           num_shards: 128
-
-# Probe settings
-probe:
-  # NATS server URL for the probe to connect to.
-  nats_url: "nats://localhost:4222"
-  # NATS subject to publish raw packet data to.
-  subject: "gons.packets.raw"
-  # Persistence settings for storing raw packets to disk.
-  persistence:
-    enabled: false
-    path: "test/publish" # File path for persisted packets
-    num_workers: 4             # Number of goroutines for writing
-    channel_buffer_size: 10000 # Size of the buffered channel for persistence
-    encoding: "pcap" # Encoding format: "text", "gob", or "pcap"

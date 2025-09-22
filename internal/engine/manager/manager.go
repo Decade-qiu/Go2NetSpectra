@@ -2,11 +2,13 @@ package manager
 
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
+	"Go2NetSpectra/internal/alerter"
 	"Go2NetSpectra/internal/config"
 	_ "Go2NetSpectra/internal/engine/impl/exact"  // Registers exact task aggregator
 	_ "Go2NetSpectra/internal/engine/impl/sketch" // Registers sketch task aggregator
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
+	"Go2NetSpectra/internal/notification"
 	"fmt"
 	"log"
 	"net"
@@ -17,6 +19,7 @@ import (
 // Manager orchestrates a set of aggregation tasks and their writers.
 type Manager struct {
 	taskGroups []factory.TaskGroup
+	alerter    *alerter.Alerter
 
 	// Worker pool for concurrent packet processing
 	packetChannel chan *v1.PacketInfo
@@ -45,8 +48,26 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		return nil, fmt.Errorf("aggregator period must be a positive duration")
 	}
 
+	var alertr *alerter.Alerter
+	if cfg.Alerter.Enabled {
+		// For now, we only initialize the email notifier. This can be expanded later.
+		var notifiers []model.Notifier
+		if cfg.SMTP.Host != "" { // Simple check to see if email is configured
+			notifiers = append(notifiers, notification.NewEmailNotifier(cfg.SMTP))
+		}
+
+		if len(notifiers) > 0 {
+			// The Alerter gets the task groups so it can orchestrate them.
+			alertr = alerter.NewAlerter(cfg.Alerter, notifiers, taskGroups)
+			log.Println("Alerter enabled and initialized.")
+		} else {
+			log.Println("Alerter is enabled in config, but no notifiers are configured. Alerter will not run.")
+		}
+	}
+
 	return &Manager{
 		taskGroups:    taskGroups,
+		alerter:       alertr,
 		period:        period,
 		done:  		   make(chan struct{}),
 		packetChannel: make(chan *v1.PacketInfo, cfg.Aggregator.SizeOfPacketChannel),
@@ -70,6 +91,11 @@ func (m *Manager) Start() {
 	m.resetterWg.Add(1)
 	go m.runResetter()
 	log.Printf("Started global resetter with period %s", m.period)
+
+	// Start the independent alerter goroutine if it's enabled.
+	if m.alerter != nil {
+		go m.alerter.Run()
+	}
 
 	// Start the packet processing worker pool.
 	m.workerWg.Add(m.numWorkers)
@@ -168,13 +194,19 @@ func (m *Manager) Stop() {
 	log.Println("Waiting for workers to finish...")
 	m.workerWg.Wait()
 
-	// 3. Signal snapshotters and resetter to take final actions and exit.
+	// 4. Signal snapshotters and resetter to take final actions and exit.
 	close(m.done)
 	log.Println("Waiting for snapshotters and resetter to finish...")
 
-	// 4. Wait for all goroutines to complete.
+	// 5. Wait for all goroutines to complete.
 	m.snapshotterWg.Wait()
 	m.resetterWg.Wait()
+
+	// 6. Stop the alerter if it's running.
+	if m.alerter != nil {
+		m.alerter.Stop()
+	}
+
 	log.Println("Manager stopped.")
 }
 
