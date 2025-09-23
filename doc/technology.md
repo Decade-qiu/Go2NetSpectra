@@ -300,6 +300,63 @@ Exact 实现
 
 ---
 
+## 5. AI 智能分析架构 (`ns-ai`)
+
+为了将大型语言模型（LLM）的能力集成到网络监控中，Go2NetSpectra 引入了一个全新的微服务：`ns-ai`。它不仅是一个功能模块，更是一个遵循安全和可扩展原则的架构实践。
+
+### 5.1. 架构定位：安全的 AI 网关
+
+`ns-ai` 的核心角色是一个**安全的、集中的 AI 网关**。它将与第三方 AI 服务（如 OpenAI, Google AI 等）交互的所有复杂性都封装在内部。
+
+- **安全与封装**: 所有 API 密钥、SDK 依赖和特定的提示工程（Prompt Engineering）逻辑都仅存在于 `ns-ai` 服务中。其他业务模块（如 `Alerter`）无需也无法直接访问这些敏感信息，它们只能通过 gRPC 与 `ns-ai` 通信，大大降低了安全风险。
+- **灵活性与解耦**: 通过在配置中提供 `base_url` 选项，`ns-ai` 可以轻松地从一个 AI 提供商切换到另一个兼容 OpenAI API 的提供商，而无需改动任何上游服务的代码。
+
+### 5.2. gRPC 接口设计：双模式服务
+
+`ns-ai` 提供了两种 gRPC 接口，以满足不同的应用场景：
+
+1.  **一元 RPC (`AnalyzeTraffic`)**: 用于简单的“请求-响应”模式。`Alerter` 使用此接口发送告警摘要并一次性获取分析结果。
+2.  **流式 RPC (`AnalyzePromptStream`)**: 用于交互式场景。`scripts/ask-ai` 客户端使用此接口，可以实时接收并显示 AI 返回的文本流，提供了优秀的交互体验。
+
+### 5.3. 与 Alerter 的联动工作流
+
+AI 分析最核心的应用场景是赋能告警系统，将原始告警转化为包含深度洞察和行动建议的智能报告。以下是完整的端到端工作流：
+
+```mermaid
+sequenceDiagram
+    participant Alerter as Alerter 模块
+    participant Task as 具体聚合任务
+    participant AI_Service as ns-ai 服务
+    participant Notifier as 通知器 (Email)
+
+    loop 定期检查
+        Alerter->>Task: AlerterMsg(rules)
+        Note right of Task: 任务自我评估, 返回告警字符串
+        Task-->>Alerter: "Alert: High traffic from X..."
+    end
+
+    Alerter->>Alerter: 汇总所有告警字符串
+    
+    opt AI 分析已启用
+        Alerter->>AI_Service: gRPC: AnalyzeTraffic(summary)
+        Note right of AI_Service: 调用 LLM 分析告警摘要
+        AI_Service-->>Alerter: 返回 Markdown 格式的分析报告
+        Alerter->>Alerter: 将 Markdown 转换为 HTML
+    end
+
+    Alerter->>Alerter: 拼接最终的 HTML 邮件正文
+    Alerter->>Notifier: Send(subject, html_body)
+    Notifier-->>Notifier: 发送富文本邮件
+```
+
+**关键流程解读**:
+
+- **职责下放**: `Alerter` 将规则评估的职责下放给各个 `Task`，自己只负责收集结果。
+- **宏观分析**: `Alerter` 将当前检查周期内**所有**触发的告警汇总后，进行**一次**集中的 AI 分析，这让 AI 能够基于全局视角提供更高质量的洞察。
+- **格式适配**: 为了解决邮件客户端不渲染 Markdown 的问题，`Alerter` 在发送通知前，使用 `gomarkdown/markdown` 库将 AI 返回的报告转换为 HTML，确保了最终通知的格式优美、可读性强。
+
+---
+
 ## 3. 探针设计：异步持久化
 
 `ns-probe` 的一个关键设计是其可选的异步持久化功能。为了在不影响核心抓包和发布性能的前提下，实现对原始流量的本地备份，我们设计了一个 `persistent.Worker`。

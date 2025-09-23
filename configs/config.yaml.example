@@ -1,0 +1,110 @@
+# Go2NetSpectra Example Configuration
+
+# Probe configuration for capturing packets and sending them to the engine.
+probe:
+  # NATS URL for the message bus.
+  nats_url: "nats://localhost:4222"
+  # Name of the NATS subject to publish packets to.
+  subject_name: "gopacket"
+
+# Aggregator engine configuration.
+aggregator:
+  # Global measurement period. After this period, all task counters are reset.
+  period: "60s"
+  # A list of aggregator types to enable. Can be "exact", "sketch", or both.
+  types: ["exact", "sketch"]
+  # Size of the buffered channel for incoming packets.
+  size_of_packet_channel: 10000
+  # Number of worker goroutines for processing packets.
+  num_workers: 4
+
+  # Configuration for the 'exact' aggregator (100% accurate accounting).
+  exact:
+    # A list of tasks for the exact aggregator.
+    tasks:
+      - name: "per_src_ip"
+        key: ["SrcIP"]
+      - name: "per_flow"
+        key: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
+    # A list of writers to persist the snapshot data.
+    writers:
+      - type: "clickhouse"
+        snapshot_interval: "10s"
+        clickhouse:
+          host: "localhost"
+          port: 19000
+          user: "default"
+          password: "123"
+          database: "default"
+
+  # Configuration for the 'sketch' aggregator (probabilistic estimation).
+  sketch:
+    tasks:
+      - name: "per_src_ip_cm"
+        key: ["SrcIP"]
+        skt_type: 0 # 0 for CountMin, 1 for SuperSpread
+        # CountMin specific config
+        width: 8192
+        depth: 2
+      - name: "per_flow_ss"
+        key: ["SrcIP"]
+        elementkey: ["DstIP"]
+        skt_type: 1 # 0 for CountMin, 1 for SuperSpread
+        # SuperSpread specific config
+        m: 1048576
+        size: 128
+        base: 2
+        b: 4
+    writers:
+      - type: "clickhouse"
+        snapshot_interval: "10s"
+        clickhouse:
+          host: "localhost"
+          port: 19000
+          user: "default"
+          password: "123"
+          database: "default"
+
+# API server configuration.
+api:
+  grpc_listen_addr: ":50051"
+  http_listen_addr: ":8080"
+
+# SMTP configuration for email notifications.
+smtp:
+  host: "smtp.example.com"
+  port: 587
+  user: "user@example.com"
+  password: "your-password"
+  from: "user@example.com"
+  to: "recipient@example.com"
+
+# Alerter configuration.
+alerter:
+  enabled: true
+  check_interval: "30s"
+  # AI Analysis configuration for enriching alerts.
+  ai_analysis:
+    enabled: false
+    service_addr: ":50052" # Address of the ns-ai gRPC service
+  rules:
+    - name: "high_traffic_source"
+      task_name: "per_src_ip" # Must match a task name from the aggregator section
+      metric: "ByteCount"
+      operator: ">"
+      threshold: 1000000 # 1MB
+
+# AI Analysis Service Configuration
+ai:
+  # gRPC listen address for the ns-ai service
+  grpc_listen_addr: ":50052"
+  # OpenAI compatible API configuration
+  openai:
+    # API key for the AI service. It is recommended to use environment variables.
+    # Example: api_key: "${OPENAI_API_KEY}"
+    api_key: "your-api-key-here"
+    # The model to use for analysis (e.g., gpt-4, gpt-3.5-turbo)
+    model: "gpt-4"
+    # Optional: Specify a custom base URL for providers compatible with the OpenAI API
+    # (e.g., for local LLMs or other cloud providers).
+    # base_url: "http://localhost:8080/v1"

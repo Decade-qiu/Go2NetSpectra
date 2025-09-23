@@ -7,10 +7,11 @@
 ### Core Features
 
 - **Hybrid Analysis Engine**: Simultaneously runs multiple aggregator types. This allows the system to perform **100% accurate accounting** (`exact` mode) and **high-performance probabilistic analysis** (`sketch` mode) *at the same time*, enabling powerful, data-driven workflows (e.g., use `sketch` to find anomalies, then use `exact` to get precise details).
+- **AI-Powered Alert Analysis**: A new `ns-ai` microservice provides intelligent analysis for triggered alerts. It enriches notifications with root cause analysis, threat assessment, and mitigation suggestions, turning raw alerts into actionable insights.
 - **Real-time Alerting**: A built-in alerting pipeline allows tasks to generate event messages (e.g., heavy hitter detected). These are processed by a central `Alerter` which can trigger notifications via webhooks, providing immediate insights into network events.
 - **Pluggable Aggregation Algorithms**: The `sketch` aggregator is a micro-framework that dynamically loads different estimation algorithms based on configuration. Currently supports **Count-Min Sketch** (for heavy hitters) and **SuperSpread** (for cardinality/super-spreaders).
 - **High-Performance by Design**: Built from the ground up for performance, utilizing Go's concurrency model (worker pools), lock-free optimizations (atomic operations in sketches), and efficient data serialization (Protobuf).
-- **Decoupled & Scalable**: All major components (`probe`, `engine`, `api`) are decoupled via a message bus and are designed to be horizontally scalable, making the system suitable for high-volume, distributed environments.
+- **Decoupled & Scalable**: All major components (`probe`, `engine`, `api`, `ai`) are decoupled via a message bus or gRPC and are designed to be horizontally scalable, making the system suitable for high-volume, distributed environments.
 
 ---
 
@@ -27,9 +28,9 @@ graph TD
         Probe -- Protobuf over NATS --> NATS[(NATS Message Bus)]
     end
 
-    subgraph "Processing Plane (ns-engine)"
+    subgraph "Processing & Analysis Plane"
         direction TB
-        NATS -- Protobuf --> Manager(Manager: Worker Pool)
+        NATS -- Protobuf --> Manager(ns-engine: Manager)
         
         subgraph "Aggregation Tasks"
             Manager -- fan-out --> Tasks(Sketch & Exact Tasks)
@@ -37,30 +38,35 @@ graph TD
 
         Tasks -- snapshot --> Storage(Storage: ClickHouse)
         
-        subgraph "Real-time Alerting"
+        subgraph "Real-time Alerting & AI Analysis"
             Tasks -- generates event --> Manager
             Manager -- forwards --> Alerter(Alerter)
-            Alerter --> Notifier(Notifier: Webhook)
+            Alerter -- gRPC --> AI_Service(ns-ai)
+            AI_Service --> Alerter
+            Alerter --> Notifier(Notifier: Email, etc.)
         end
     end
 
-    subgraph "Query Plane (ns-api)"
+    subgraph "Query & Interaction"
         API[ns-api]
         User[User/Client] -- gRPC --> API
         API -- queries --> Storage
+
+        AI_Client[AI Client] -- gRPC Stream --> AI_Service
     end
 
     style NATS fill:#FFB6C1,stroke:#333,stroke-width:2px
     style Manager fill:#ADD8E6,stroke:#333,stroke-width:2px
     style API fill:#90EE90,stroke:#333,stroke-width:2px
     style Alerter fill:#FFD700,stroke:#333,stroke-width:2px
+    style AI_Service fill:#C9A0DC,stroke:#333,stroke-width:2px
 ```
 
 - **Data Sources**: The system processes both live traffic via `ns-probe` and offline `pcap` files using `pcap-analyzer`.
 - **Pipeline**: Live data is serialized with Protobuf and streamed through NATS, decoupling the probe from the processing engine.
 - **Engine Core**: The heart of the system, where the `Manager` orchestrates a worker pool. It fans out incoming data to various pluggable `Task` aggregators (like `Exact` and `Sketch`) for parallel processing.
-- **Persistence & Alerting**: Aggregated data is periodically snapshotted to a ClickHouse database. Simultaneously, tasks can generate real-time events (like detecting a heavy hitter), which are routed through the `Alerter` to trigger external notifications.
-- **Query & Visualization**: The `ns-api` server provides a gRPC endpoint for programmatic queries and an HTTP/JSON endpoint for visualization tools like Grafana, which queries the aggregated data from ClickHouse.
+- **Persistence & Alerting**: Aggregated data is periodically snapshotted to a ClickHouse database. Simultaneously, tasks can generate real-time events, which are routed through the `Alerter`. The `Alerter` can then call the `ns-ai` service for intelligent analysis before sending a rich notification.
+- **Query & Visualization**: The `ns-api` server provides a gRPC endpoint for programmatic queries and an HTTP/JSON endpoint for visualization tools like Grafana. A separate `ns-ai` service provides gRPC endpoints for both simple and streaming AI interactions.
 
 For a more detailed explanation of the architecture, configuration files (`config.yaml` vs `config.docker.yaml`), and how to run validation tests, see [`doc/technology.md`](doc/technology.md) and [`doc/build.md`](doc/build.md).
 
