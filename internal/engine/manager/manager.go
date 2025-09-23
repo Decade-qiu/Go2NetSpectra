@@ -50,15 +50,23 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 
 	var alertr *alerter.Alerter
 	if cfg.Alerter.Enabled {
-		// For now, we only initialize the email notifier. This can be expanded later.
-		var notifiers []model.Notifier
-		if cfg.SMTP.Host != "" { // Simple check to see if email is configured
-			notifiers = append(notifiers, notification.NewEmailNotifier(cfg.SMTP))
+		var allTasks []model.Task
+		for _, group := range taskGroups {
+			allTasks = append(allTasks, group.Tasks...)
 		}
 
-		if len(notifiers) > 0 {
-			// The Alerter gets the task groups so it can orchestrate them.
-			alertr = alerter.NewAlerter(cfg.Alerter, notifiers, taskGroups)
+		// For now, we only initialize the email notifier. This can be expanded later.
+		var notifier model.Notifier
+		if cfg.SMTP.Host != "" { // Simple check to see if email is configured
+			notifier = notification.NewEmailNotifier(cfg.SMTP)
+		}
+
+		if notifier != nil {
+			var err error
+			alertr, err = alerter.NewAlerter(&cfg.Alerter, allTasks, notifier)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create alerter: %w", err)
+			}
 			log.Println("Alerter enabled and initialized.")
 		} else {
 			log.Println("Alerter is enabled in config, but no notifiers are configured. Alerter will not run.")
@@ -94,7 +102,7 @@ func (m *Manager) Start() {
 
 	// Start the independent alerter goroutine if it's enabled.
 	if m.alerter != nil {
-		go m.alerter.Run()
+		go m.alerter.Start()
 	}
 
 	// Start the packet processing worker pool.

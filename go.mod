@@ -4,14 +4,15 @@ go 1.25.0
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.1
+	github.com/gomarkdown/markdown v0.0.0-20250810172220-2e2c11897d1a
 	github.com/google/gopacket v1.1.19
 	github.com/gorilla/mux v1.8.1
 	github.com/nats-io/nats.go v1.31.0
+	github.com/sashabaranov/go-openai v1.41.2
 	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.9
 	gopkg.in/yaml.v3 v3.0.1
 )
-
 
 require (
 	github.com/ClickHouse/ch-go v0.67.0 // indirect

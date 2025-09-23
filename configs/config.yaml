@@ -4,6 +4,18 @@ api:
   grpc_listen_addr: ":50051"
   http_listen_addr: ":8080"
 
+ai:
+  # AI service provider, e.g., "openai", "gemini"
+  provider: "openai"
+  # API key for the AI service.
+  api_key: ""
+  # AI model name, e.g., "gpt-4", "gemini-pro"
+  model: "gemini-2.5-flash"
+  # (Optional) Custom base URL for OpenAI-compatible APIs
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  # ns-ai gRPC address 
+  grpc_listen_addr: ":50052"
+
 # Probe settings
 probe:
   # NATS server URL for the probe to connect to.
@@ -21,19 +33,16 @@ probe:
 # Alerter Configuration
 alerter:
   enabled: true
-  check_interval: "300s" # Check for alerts every 30 seconds
+  check_interval: "600s" # Check for alerts every 30 seconds
+  ai_analysis:
+    enabled: true
+    service_addr: "localhost:50052" # Address of the ns-ai gRPC service
   rules:
     - name: "Potential_DDoS_Source_Detected"
       task_name: "ss_src_dst"
       metric: "super_spreader_spread"
       operator: ">"
       threshold: 5000
-
-    - name: "High_Frequency_Flow_Detected"
-      task_name: "per_src_ip"
-      metric: "total_packets"
-      operator: ">"
-      threshold: 10000
 
     - name: "Total_Traffic_Spike"
       task_name: "per_five_tuple"
@@ -46,10 +55,10 @@ alerter:
 smtp:
   host: "smtp.qq.com"
   port: 587
-  username: "zj-qiu@foxmail.com"
-  password: "rukwdywzbjlpdbhj" # Use an app-specific password if required
-  from: "zj-qiu@foxmail.com"
-  to: "3101346700@qq.com" # Comma-separated list of recipients
+  username: ""
+  password: "" # Use an app-specific password if required
+  from: ""
+  to: "" # Comma-separated list of recipients
 
 # Configuration file for the network traffic aggregator system.
 aggregator:

@@ -116,9 +116,16 @@ type AlerterRule struct {
 
 // AlerterConfig holds all configuration for the alerter component.
 type AlerterConfig struct {
-	Enabled       bool          `yaml:"enabled"`
-	CheckInterval string        `yaml:"check_interval"`
-	Rules         []AlerterRule `yaml:"rules"`
+	Enabled       bool             `yaml:"enabled"`
+	CheckInterval string           `yaml:"check_interval"`
+	Rules         []AlerterRule    `yaml:"rules"`
+	AIAnalysis    AIAnalysisConfig `yaml:"ai_analysis"`
+}
+
+// AIAnalysisConfig holds the configuration for the alerter's AI analysis feature.
+type AIAnalysisConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	ServiceAddr string `yaml:"service_addr"`
 }
 
 // SMTPConfig holds the configuration for the email notifier.
@@ -132,12 +139,23 @@ type SMTPConfig struct {
 }
 
 // Config is the top-level configuration struct for the entire application.
+
+// AIConfig defines the configuration for the AI analyzer service.
+type AIConfig struct {
+	Provider      string `yaml:"provider"`
+	APIKey        string `yaml:"api_key"`
+	Model         string `yaml:"model"`
+	BaseURL       string `yaml:"base_url"`
+	GRPCLisenAddr string `yaml:"grpc_listen_addr"`
+}
+
 type Config struct {
 	Aggregator AggregatorConfig `yaml:"aggregator"`
 	Probe      ProbeConfig      `yaml:"probe"`
 	API        APIConfig        `yaml:"api"`
 	Alerter    AlerterConfig    `yaml:"alerter"`
 	SMTP       SMTPConfig       `yaml:"smtp"`
+	AI         AIConfig         `yaml:"ai"`
 }
 
 // LoadConfig reads the configuration from a YAML file and returns a Config struct.
