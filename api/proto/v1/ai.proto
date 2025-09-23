@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package v1;
+
+option go_package = "api/gen/v1";
+
+// AIService provides AI-powered analysis of network traffic data.
+service AIService {
+  // AnalyzeTraffic analyzes the input traffic summary and returns insights.
+  rpc AnalyzeTraffic(AnalyzeTrafficRequest) returns (AnalyzeTrafficResponse) {}
+
+  // AnalyzePromptStream receives a general-purpose prompt and returns the analysis in a stream.
+  rpc AnalyzePromptStream(AnalyzePromptRequest) returns (stream AnalyzePromptResponse) {}
+}
+
+message AnalyzeTrafficRequest {
+  // text_input is the text content to be analyzed, e.g., a traffic statistics summary.
+  string text_input = 1;
+}
+
+message AnalyzeTrafficResponse {
+  // text_output is the analysis result or insight returned by the AI model.
+  string text_output = 1;
+}
+
+message AnalyzePromptRequest {
+  // prompt is any text content entered by the user.
+  string prompt = 1;
+}
+
+message AnalyzePromptResponse {
+  // chunk is a piece of text returned by the AI model in a stream.
+  string chunk = 1;
+}
