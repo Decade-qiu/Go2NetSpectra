@@ -37,7 +37,9 @@ func (n *EmailNotifier) Send(subject, body string) error {
 	// Send the email.
 	err := smtp.SendMail(addr, n.auth, n.cfg.From, recipients, msg)
 	if err != nil {
-		return fmt.Errorf("failed to send email: %w", err)
+		if !strings.Contains(err.Error(), "short response") {
+			return fmt.Errorf("failed to send email: %w", err)
+		}
 	}
 
 	return nil
