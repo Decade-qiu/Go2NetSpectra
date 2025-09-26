@@ -22,3 +22,6 @@ test/
 GEMINI.md
 *.txt
 *.ipynb
+
+# Ignore local environment files
+*.env
