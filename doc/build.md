@@ -13,14 +13,19 @@
 - **Go**: 版本 `1.21` 或更高。请通过 `go version` 命令确认。
 - **Protobuf Compiler (`protoc`)**: 用于将 `.proto` 文件编译成 Go 代码。请从 [Protobuf GitHub Releases](https://github.com/protocolbuffers/protobuf/releases) 下载并安装。
 - **Docker**: 用于快速启动 NATS、ClickHouse 等依赖服务，以及进行容器化部署。
+- **`godotenv`**: Go 应用程序用于加载 `.env` 文件的库，通过 `go mod` 自动管理。
 
 ### 1.2. 配置文件说明
 
-项目使用两个独立的配置文件来管理不同环境下的设置：
+Go2NetSpectra 采用 **`configs/config.yaml`** 作为唯一的配置文件。为了实现灵活的环境配置和敏感数据管理，我们利用了 **环境变量**。
 
-- **`configs/config.yaml`**: 用于**本地开发**。当您在本地使用 `go run` 命令直接运行 `ns-probe`, `ns-engine`, `ns-api` 时，程序会加载此文件。在此文件中，所有服务地址（如 NATS, ClickHouse）都应配置为 `localhost`，以便连接到通过 Docker 暴露在主机上的端口。
+- **`configs/config.yaml`**: 包含所有应用程序的配置项。敏感数据和环境相关的设置（如服务地址、端口、凭证）都使用 `${VAR_NAME}` 占位符。程序启动时会读取此文件，并通过 `os.ExpandEnv` 自动替换这些占位符。
 
-- **`configs/config.docker.yaml`**: 用于**容器化部署**。当您使用 `docker compose` 启动服务时，此文件会被构建到镜像内部。在此文件中，所有服务地址都必须使用 Docker Compose 服务名（如 `nats`, `clickhouse`），以便容器在内部网络中互相发现。
+- **`.env` 文件 (本地开发)**: 在项目根目录下创建 `.env` 文件（可从 `configs/.env.example` 复制）。此文件用于存储本地开发环境的特定配置（例如 `NATS_URL=nats://localhost:4222`）和敏感凭证。Go 应用程序在启动时会自动加载此文件。
+
+- **`.docker.env` 文件 (Docker Compose)**: 在 `deployments/docker-compose/` 目录下创建 `.docker.env` 文件（可从 `configs/.env.example` 复制）。此文件用于存储 Docker Compose 环境的特定配置（例如 `NATS_URL=nats://nats:4222`）和敏感凭证。`docker-compose` 会自动加载此文件，并将变量传递给容器。
+
+**重要提示**: `.env` 和 `.docker.env` 文件都已被添加到 `.gitignore` 中，请勿将其提交到版本控制系统。
 
 ---
 
@@ -53,56 +58,22 @@ protoc --proto_path=api/proto \
 
 在本地开发模式下，我们通常在本地运行 Go 程序，但将 NATS 和 ClickHouse 等依赖作为 Docker 容器启动。
 
-### 3.1. 启动依赖服务
+### 3.1. 环境准备
+
+1.  **创建 `.env` 文件**: 在项目根目录下，复制 `configs/.env.example` 到 `.env`，并根据您的本地环境填写所有变量。
+2.  **启动依赖服务**: 在不同终端中启动 NATS 和 ClickHouse 容器。
 
 ```sh
 # 终端 1: 启动 NATS
 docker run --rm -p 4222:4222 nats:latest
 
 # 终端 2: 启动 ClickHouse (注意端口映射)
-docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=123 --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
+docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD} --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
 ```
 
 ### 3.2. 运行应用
 
-确保您的 `configs/config.yaml` 文件中的地址指向 `localhost`，并已配置好您希望同时运行的聚合器类型。
-
-**示例 `config.yaml` 片段：**
-```yaml
-aggregator:
-  types: ["sketch", "exact"] # 同时运行 sketch 和 exact 聚合器
-  period: "720h"
-  num_workers: 4
-  size_of_packet_channel: 10000
-
-  sketch:
-    writers:
-      - type: "clickhouse"
-        enabled: true
-        snapshot_interval: "10s"
-        clickhouse:
-          host: "localhost"
-          port: 19000
-          password: "123"
-          # ...
-    tasks:
-      # ... sketch 任务定义
-
-  exact:
-    writers:
-      - type: "clickhouse"
-        enabled: true
-        snapshot_interval: "10s"
-        clickhouse:
-          host: "localhost"
-          port: 19000
-          password: "123"
-          # ...
-    tasks:
-      # ... exact 任务定义
-```
-
-然后，在不同终端中启动核心服务：
+在不同终端中启动核心服务。应用程序将自动从 `.env` 文件中加载配置。
 
 ```sh
 # 终端 3: 启动引擎
@@ -111,7 +82,10 @@ go run ./cmd/ns-engine/main.go
 # 终端 4: 启动 API 服务 (v2 gRPC Server)
 go run ./cmd/ns-api/v2/main.go
 
-# 终端 5: 启动探针
+# 终端 5: 启动 AI 服务
+go run ./cmd/ns-ai/main.go
+
+# 终端 6: 启动探针
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 ```
 
@@ -123,7 +97,8 @@ sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 
 ### 4.1. 配置
 
-`docker compose` 模式会自动使用 `configs/config.docker.yaml` 文件，该文件已被配置为使用服务名进行容器间通信。您无需修改它。
+1.  **创建 `.docker.env` 文件**: 在 `deployments/docker-compose/` 目录下，复制 `configs/.env.example` 到 `.docker.env`，并根据您的 Docker Compose 环境填写所有变量。
+2.  **确保 `config.yaml` 正确**: `docker-compose` 会将 `configs/config.yaml` 挂载到容器内部，并通过 `.docker.env` 提供的环境变量进行配置。
 
 ### 4.2. 启动服务
 
@@ -132,7 +107,7 @@ sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 docker compose up --build
 ```
 
-此命令会一并启动 `nats`, `clickhouse`, `ns-engine`, 和 `ns-api` 四个服务，并处理好它们之间的启动依赖顺序。
+此命令会一并启动 `nats`, `clickhouse`, `ns-engine`, `ns-api`, `ns-ai` 和 `grafana` 等所有服务，并处理好它们之间的启动依赖顺序。
 
 ### 4.3. 验证与查询
 
@@ -140,18 +115,21 @@ docker compose up --build
 
 *   **访问 Grafana**: 在浏览器中打开 `http://localhost:3000` (默认用户名/密码: `admin`/`admin`)。您应该能看到一个名为 `Go2NetSpectra Overview` 的预置仪表盘，并能从中看到实时数据。
 
-*   **运行探针**: 在一个新终端中，运行 `ns-probe` 向容器化的 NATS 发送数据。
+*   **运行探针**: 在一个新终端中，运行 `ns-probe` 向容器化的 NATS 发送数据。确保您的本地 `.env` (或环境变量) 中 `NATS_URL` 配置为 `nats://localhost:4222`。
     ```sh
     sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
     ```
 
-*   **使用查询脚本**: 在另一个新终端中，使用 **v2 脚本** 与 `ns-api` 的 gRPC 服务交互。
+*   **使用查询脚本**: 在另一个新终端中，使用 **v2 脚本** 与 `ns-api` 的 gRPC 服务交互。确保您的本地 `.env` (或环境变量) 中 `API_GRPC_LISTEN_ADDR` 配置为 `localhost:50051`。
     ```sh
     # 查询聚合流
     go run ./scripts/query/v2/main.go --mode=aggregate --task=per_src_ip
 
     # 查询大流 (heavy hitters)
     go run ./scripts/query/v2/main.go --mode=heavyhitters --task=per_src_ip --type=0 --limit=10
+
+    # 与 AI 服务交互
+    go run ./scripts/ask-ai/main.go "Summarize the network traffic anomalies."
     ```
 
 ---

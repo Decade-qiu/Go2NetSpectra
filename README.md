@@ -74,8 +74,6 @@ For a more detailed explanation of the architecture, configuration files (`confi
 
 ## Getting Started
 
-(The rest of the README remains the same)
-
 This guide provides two primary ways to run the project. Choose the one that best fits your needs.
 
 ### Prerequisites
@@ -83,6 +81,7 @@ This guide provides two primary ways to run the project. Choose the one that bes
 - Go 1.25+
 - `protoc` Compiler
 - Docker and Docker Compose
+- `godotenv` (for local development, automatically handled by `go mod`)
 
 ### First-Time Setup (Protobuf Generation)
 
@@ -100,24 +99,26 @@ protoc --proto_path=api/proto \
 
 ---
 
+### Configuration Management with Environment Variables
+
+Go2NetSpectra uses a single `configs/config.yaml` file for all configurations. Sensitive data and environment-specific settings (like service addresses) are managed via **environment variables** using `${VAR_NAME}` placeholders in `config.yaml`.
+
+- **Local Development**: Create a `.env` file in the project root (copy from `.env.example`) and fill in your local settings. The Go applications will automatically load these variables.
+- **Docker Compose**: Create a `.docker.env` file in the `deployments/docker-compose/` directory (copy from `.env.example`) and fill in your Docker-specific settings. `docker-compose` will automatically load these variables for the services.
+
+---
+
 ### Option 1: Run with Docker Compose (Recommended)
 
-This is the easiest way to run the entire backend system. You will run all backend services (`nats`, `clickhouse`, `ns-engine`, `ns-api`) in Docker, and then run `ns-probe` on your local machine to capture and send traffic.
+This is the easiest way to run the entire backend system. You will run all backend services (`nats`, `clickhouse`, `ns-engine`, `ns-api`, `ns-ai`, `grafana`) in Docker, and then run `ns-probe` on your local machine to capture and send traffic.
 
-**Step 1: Configure for Local Probe**
+**Step 1: Prepare `.docker.env`**
 
-Ensure your **`configs/config.yaml`** is configured for your local `ns-probe` to connect to the Dockerized NATS service. The `probe` section should point to `localhost`.
-
-```yaml
-# configs/config.yaml
-probe:
-  nats_url: "nats://localhost:4222"
-  # ...
-```
+Copy `configs/.env.example` to `deployments/docker-compose/.docker.env` and fill in the appropriate values for your Docker environment (e.g., `CLICKHOUSE_HOST=clickhouse`, `NATS_URL=nats://nats:4222`).
 
 **Step 2: Start Backend Services**
 
-Navigate to the Docker Compose directory and start all services. This uses `configs/config.docker.yaml` internally for container-to-container communication.
+Navigate to the Docker Compose directory and start all services.
 
 ```sh
 cd deployments/docker-compose/
@@ -127,16 +128,16 @@ Leave this terminal running.
 
 **Step 3: Capture Traffic on Host**
 
-Open a **new terminal**. Run `ns-probe` locally to capture traffic and send it to the NATS container.
+Open a **new terminal**. Run `ns-probe` locally to capture traffic and send it to the NATS container. Ensure your local `.env` (or environment variables) has `NATS_URL=nats://localhost:4222`.
 
 ```sh
 # Replace <interface_name> with your network interface (e.g., en0, eth0)
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 ```
 
-**Step 4: Query the API**
+**Step 4: Query the API & Interact with AI**
 
-Open a **third terminal** and use the new **v2 query script** to interact with the `ns-api` gRPC service.
+Open a **third terminal** and use the scripts to interact with the services.
 
 ```sh
 # Example: Query for aggregated flows
@@ -144,52 +145,34 @@ go run ./scripts/query/v2/main.go --mode=aggregate --task=per_src_ip
 
 # Example: Query for heavy hitters detected by a sketch task
 go run ./scripts/query/v2/main.go --mode=heavyhitters --task=per_src_ip --type=0 --limit=10
+
+# Example: Interact with the AI service (ensure AI_GRPC_LISTEN_ADDR is set in your local .env)
+go run ./scripts/ask-ai/main.go "Summarize the network traffic anomalies."
 ```
 
 ---
 
 ### Option 2: Run Locally for Development
 
-This mode is useful for debugging individual components (`ns-probe`, `ns-engine`, `ns-api`) directly on your machine, while still using Docker for external dependencies.
+This mode is useful for debugging individual components (`ns-probe`, `ns-engine`, `ns-api`, `ns-ai`) directly on your machine, while still using Docker for external dependencies.
 
-**Step 1: Start Dependencies in Docker**
+**Step 1: Prepare `.env`**
+
+Copy `configs/.env.example` to the project root (`.env`) and fill in the appropriate values for your local development environment (e.g., `CLICKHOUSE_HOST=localhost`, `NATS_URL=nats://localhost:4222`).
+
+**Step 2: Start Dependencies in Docker**
 
 ```sh
 # Terminal 1: Start NATS
 docker run --rm -p 4222:4222 nats:latest
 
 # Terminal 2: Start ClickHouse (note the port mapping 19000:9000)
-docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=123 --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
-```
-
-**Step 2: Configure for Localhost**
-
-Ensure your **`configs/config.yaml`** is configured for all services to connect to `localhost`.
-
-```yaml
-# configs/config.yaml
-probe:
-  nats_url: "nats://localhost:4222"
-  # ...
-
-aggregator:
-  exact:
-    writers:
-      - type: "clickhouse"
-        clickhouse:
-          host: "localhost"
-          port: 19000
-          password: "123"
-          # ...
-
-api:
-  grpc_listen_addr: ":50051"
-  http_listen_addr: ":8080"
+docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD} --name some-clickhouse-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
 ```
 
 **Step 3: Run Go Applications Locally**
 
-Open a separate terminal for each command.
+Open a separate terminal for each command. The applications will automatically pick up settings from your `.env` file.
 
 ```sh
 # Terminal 3: Start the Engine
@@ -198,6 +181,9 @@ go run ./cmd/ns-engine/main.go
 # Terminal 4: Start the API Server (v2)
 go run ./cmd/ns-api/v2/main.go
 
-# Terminal 5: Start the Probe
+# Terminal 5: Start the AI Service
+go run ./cmd/ns-ai/main.go
+
+# Terminal 6: Start the Probe
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
 ```

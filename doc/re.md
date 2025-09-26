@@ -35,7 +35,14 @@ Go2NetSpectra 是一个基于 Go 语言构建的、支持分布式的、高性�
   * **FR-10**: 支持将处理和聚合后的结果写入多个数据存储目标，并可根据配置灵活选择写入器类型（如 Gob 文件、ClickHouse 数据库）。
   * **FR-11**: (高级) 支持可插拔的异常检测算法插件。
 
-**2.3. 数据存储模块 (Storage Layer)**
+#### **2.3. AI 分析模块 (`ns-ai`)**
+
+  * **FR-12**: 提供 gRPC 接口，作为统一的 AI 网关，封装与 LLM 提供商的交互。
+  * **FR-13**: 支持通过 gRPC 接收告警信息，并调用 LLM 进行智能分析，生成威胁评估、根因分析和缓解建议。
+  * **FR-14**: 支持流式 gRPC 接口，用于通用文本分析和交互式 AI 问答。
+  * **FR-15**: 能够通过配置灵活切换 LLM 模型和 `base_url`，支持 OpenAI 兼容的多种 LLM 服务。
+
+#### **2.4. 数据存储模块 (Storage Layer)**
 
   * **FR-12**: 聚合后的时序指标数据应被写入时序数据库 (如 ClickHouse, VictoriaMetrics)。**目前已集成 ClickHouse。**
   * **FR-13**: 详细的流记录 (Flow Records) 应被写入支持快速检索的分析型数据库 (如 ClickHouse, Elasticsearch)。
@@ -100,7 +107,8 @@ Go2NetSpectra 是一个基于 Go 语言构建的、支持分布式的、高性�
       * **gRPC 核心 API**: `ns-api` 服务提供 `AggregateFlows`, `TraceFlow`, `QueryHeavyHitters` 等多个高性能查询接口。
       * **智能查询路由**: `ns-api` 能够根据配置初始化多个 `Querier` 实例，并将 gRPC 请求路由到正确的数据源（例如，`AggregateFlows` 查询 `exact` 的数据，`QueryHeavyHitters` 查询 `sketch` 的数据）。
       * **实时预警系统**: 新增 `Alerter` 和 `Notifier` 模块。聚合任务现在可以生成事件，由 `Alerter` 根据规则进行判断，并通过 `Notifier` (如 Webhook) 发送实时告警，满足了 `FR-18` 需求。
-      * **容器化部署**: 提供了 `docker-compose.yml`，可以一键启动包括 `nats`, `clickhouse`, `ns-engine`, `ns-api`, 和 `grafana` 在内的完整后端服务。
+      * **AI 智能分析服务 (`ns-ai`)**: 新增 `ns-ai` 微服务，作为统一的 AI 网关，为 `Alerter` 提供智能告警分析能力，并支持交互式 AI 问答。
+      * **容器化部署**: 提供了 `docker-compose.yml`，可以一键启动包括 `nats`, `clickhouse`, `ns-engine`, `ns-api`, `ns-ai` 和 `grafana` 在内的完整后端服务。
       * **预置仪表盘**: 提供了一个基础的 Grafana 仪表盘。
 
   * **下一步**:
@@ -129,8 +137,10 @@ netspectra/
 ├── api/                  # Protobuf 定义, OpenAPI/Swagger YAML 文件
 │   └── proto/
 │       └── v1/
+│           ├── ai.proto
 │           └── traffic.proto
 ├── cmd/                  # 项目主应用入口
+│   ├── ns-ai/            # ns-ai 服务的 main.go
 │   ├── ns-api/           # ns-api 服务的 main.go
 │   ├── ns-engine/        # ns-engine 服务的 main.go
 │   ├── ns-probe/         # ns-probe 多功能工具的 main.go
@@ -144,6 +154,7 @@ netspectra/
 │   ├── technology.md
 │   └── build.md
 ├── internal/             # 项目内部私有代码，项目核心逻辑
+│   ├── ai/               # ns-ai 服务的核心实现
 │   ├── config/           # 配置加载
 │   ├── engine/           # ns-engine 服务的核心实现
 │   │   ├── exacttask/      # 精确统计任务的实现

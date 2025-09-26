@@ -437,9 +437,17 @@ sequenceDiagram
 
 ## 5. 环境配置管理
 
-为了解决本地开发和容器化部署之间环境不一致的问题（特别是服务发现地址），我们采用了多配置文件策略：
+为了实现灵活的环境配置和敏感数据管理，Go2NetSpectra 采用了 **`configs/config.yaml`** 作为唯一的配置文件，并结合 **环境变量** 进行动态配置。
 
-- **`configs/config.yaml`**: 专用于本地开发。在此文件中，所有服务地址（如 NATS, ClickHouse）都配置为 `localhost`，以便于本地运行的 Go 程序连接到通过 Docker 暴露在主机上的依赖服务。
-- **`configs/config.docker.yaml`**: 专用于容器化部署。此文件在构建 Docker 镜像时会被复制到容器的 `/configs/config.yaml` 路径。其中，所有服务地址都使用 Docker Compose 的服务名（如 `nats`, `clickhouse`），以利用 Docker 的内部 DNS 进行服务发现。
+- **`configs/config.yaml`**: 包含所有应用程序的配置项。敏感数据和环境相关的设置（如服务地址、端口、凭证）都使用 `${VAR_NAME}` 占位符。程序启动时会读取此文件，并通过 `os.ExpandEnv` 自动替换这些占位符。
 
-这种分离确保了两种开发模式可以无缝切换，而无需在每次切换时手动修改配置。
+- **`.env` 文件 (本地开发)**: 在项目根目录下创建 `.env` 文件（可从 `configs/.env.example` 复制）。此文件用于存储本地开发环境的特定配置（例如 `NATS_URL=nats://localhost:4222`）和敏感凭证。Go 应用程序在启动时会自动加载此文件（通过 `godotenv` 库）。
+
+- **`.docker.env` 文件 (Docker Compose)**: 在 `deployments/docker-compose/` 目录下创建 `.docker.env` 文件（可从 `configs/.env.example` 复制）。此文件用于存储 Docker Compose 环境的特定配置（例如 `NATS_URL=nats://nats:4222`）和敏感凭证。`docker-compose` 会自动加载此文件，并将变量传递给容器。
+
+**重要提示**: `.env` 和 `.docker.env` 文件都已被添加到 `.gitignore` 中，请勿将其提交到版本控制系统。
+
+这种策略确保了：
+1.  **安全性**: 敏感信息不会硬编码在配置文件中，也不会被意外提交到版本控制。
+2.  **灵活性**: 可以轻松地在不同环境（本地开发、Docker Compose、Kubernetes 等）之间切换配置，而无需修改代码或 `config.yaml` 文件本身。
+3.  **简洁性**: 维护一个单一的 `config.yaml` 文件，减少了配置管理的复杂性。
