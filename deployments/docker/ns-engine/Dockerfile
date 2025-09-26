@@ -11,6 +11,12 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy the entire source code
+# === Why not COPY . . in one step? ===
+# To leverage Docker layer caching effectively, we first copy only the go.mod and go.sum files
+# and run 'go mod download'. This way, if only the source code changes but the dependencies remain the same,
+# Docker can cache the layer with downloaded dependencies, speeding up subsequent builds.
+# After that, we copy the rest of the source code.
+# ====================================== 
 COPY . .
 
 # Build the ns-engine binary
@@ -23,10 +29,6 @@ FROM alpine:latest
 
 # Copy the binary from the builder stage
 COPY --from=builder /ns-engine /ns-engine
-
-# Copy the configuration file
-# The docker-compose file will mount the actual config, but this provides a default.
-COPY configs/config.docker.yaml /configs/config.yaml
 
 # Expose any ports the application might use (optional, for documentation)
 # The actual port mapping will be in docker-compose.yml
