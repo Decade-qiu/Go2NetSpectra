@@ -7,6 +7,7 @@ require (
 	github.com/gomarkdown/markdown v0.0.0-20250810172220-2e2c11897d1a
 	github.com/google/gopacket v1.1.19
 	github.com/gorilla/mux v1.8.1
+	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.31.0
 	github.com/sashabaranov/go-openai v1.41.2
 	google.golang.org/grpc v1.75.1

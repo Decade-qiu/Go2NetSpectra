@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -158,15 +159,22 @@ type Config struct {
 	AI         AIConfig         `yaml:"ai"`
 }
 
-// LoadConfig reads the configuration from a YAML file and returns a Config struct.
+// LoadConfig reads the configuration from a YAML file, expands environment variables, and returns a Config struct.
 func LoadConfig(filePath string) (*Config, error) {
+	// Load .env file if it exists. This is primarily for local development.
+	// Errors are ignored as .env might not exist in production environments.
+	_ = godotenv.Load()
+
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
+	// Expand environment variables
+	expandedData := []byte(os.ExpandEnv(string(data)))
+
 	var cfg Config
-	err = yaml.Unmarshal(data, &cfg)
+	err = yaml.Unmarshal(expandedData, &cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config YAML: %w", err)
 	}
