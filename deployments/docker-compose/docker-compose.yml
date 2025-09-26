@@ -1,30 +1,54 @@
 version: '3.8'
 
 services:
+  # nats server for packets brokering
   nats:
-    image: nats:latest
+    image: nats:2.11-alpine
     ports:
       - "4222:4222"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - gons-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4222"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
-  nats-box:
-    image: natsio/nats-box
-    command: ["nats", "server", "check", "connection", "--server", "nats:4222"]
-    depends_on:
-      - nats
-
+  # clickhouse for time-series data storage
   clickhouse:
-    image: clickhouse/clickhouse-server
+    image: clickhouse/clickhouse-server:25.8-alpine
     ports:
-      - "18123:8123"
-      - "19000:9000"
+      - "18123:8123" # HTTP
+      - "19000:9000" # Native
     environment:
-      - CLICKHOUSE_PASSWORD=123
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+    # Use named volume for persistent storage
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+    networks:
+      - gons-network
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--password", "123", "-q", "SELECT 1"]
+      test: ["CMD", "clickhouse-client", "--password", "${CLICKHOUSE_PASSWORD}", "-q", "SELECT 1"]
       interval: 5s
       timeout: 2s
       retries: 10
@@ -34,29 +58,90 @@ services:
       context: ../../
       dockerfile: deployments/docker/ns-engine/Dockerfile
     depends_on:
-      nats-box:
-        condition: service_completed_successfully
+      # wait for nats to be healthy before starting ns-engine
+      nats:
+        condition: service_healthy
+      # wait for clickhouse to be healthy before starting ns-engine
       clickhouse:
         condition: service_healthy
+    volumes:
+      - ../../configs/config.yaml:/configs/config.yaml
+      - .env:/.env
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - gons-network
 
   ns-api:
     build:
       context: ../../
       dockerfile: deployments/docker/ns-api/Dockerfile
-    ports:
-      - "8080:8080"
     depends_on:
       clickhouse:
         condition: service_healthy
-
-  grafana:
-    image: grafana/grafana:latest
     ports:
-      - "3000:3000"
-    environment:
-      - GF_INSTALL_PLUGINS=marcusolsson-json-datasource
+      - "50051:50051" # gRPC
+      - "8080:8080"   # HTTP
     volumes:
-      - ../grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
-      - ../grafana/dashboards:/etc/grafana/provisioning/dashboards
-    depends_on:
-      - ns-api
+      - ../../configs/config.yaml:/configs/config.yaml
+      - .env:/.env
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - gons-network
+
+  ns-ai:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/ns-ai/Dockerfile
+    ports:
+      - "50052:50052" # gRPC
+    volumes:
+      - ../../configs/config.yaml:/configs/config.yaml
+      - .env:/.env
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - gons-network
+
+  # grafana:
+  #   image: grafana/grafana-oss:10.1.1
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - clickhouse
+  #   volumes:
+  #     - ../grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+  #     - ../grafana/dashboards:/etc/grafana/provisioning/dashboards
+  #   restart: on-failure
+
+# Networks
+networks:
+  gons-network:
+    driver: bridge
+
+# Named volumes
+volumes:
+  clickhouse_data:
+    driver: local
