@@ -1,0 +1,65 @@
+{{- if .Values.clickhouse.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-clickhouse
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  serviceName: {{ include "go2netspectra.fullname" . }}-clickhouse
+  replicas: {{ .Values.clickhouse.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "go2netspectra.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse
+  template:
+    metadata:
+      labels:
+        {{- include "go2netspectra.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+          imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              export SERVER_ID=$((${HOSTNAME##*-} + 1))
+              export SHARD_ID=$((${HOSTNAME##*-} + 1))
+              /docker-entrypoint.sh
+          ports:
+            - containerPort: 9000
+              name: tcp
+            - containerPort: 8123
+              name: http
+            - containerPort: 9181
+              name: keeper
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "go2netspectra.fullname" . }}-secret
+                  key: CLICKHOUSE_PASSWORD
+          volumeMounts:
+            - name: clickhouse-storage
+              mountPath: /var/lib/clickhouse
+            - name: clickhouse-config
+              mountPath: /etc/clickhouse-server/config.d/
+          resources:
+            {{- toYaml .Values.clickhouse.resources | nindent 12 }}
+      volumes:
+        - name: clickhouse-config
+          configMap:
+            name: {{ include "go2netspectra.fullname" . }}-clickhouse-config
+  volumeClaimTemplates:
+    - metadata:
+        name: clickhouse-storage
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.persistence.size }}
+        storageClassName: {{ .Values.clickhouse.persistence.storageClassName }}
+{{- end }}

@@ -1,0 +1,79 @@
+{{- if .Values.clickhouse.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-clickhouse
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  clusterIP: None
+  ports:
+    - name: tcp
+      port: 9000
+      targetPort: 9000
+    - name: http
+      port: 8123
+      targetPort: 8123
+    - name: keeper
+      port: 9181
+      targetPort: 9181
+  selector:
+    {{- include "go2netspectra.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-clickhouse-config
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+data:
+  keeper.xml: |-
+    <yandex>
+      <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id_from_env>SERVER_ID</server_id_from_env>
+        <log_storage_path>/var/lib/clickhouse/keeper/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/keeper/snapshots</snapshot_storage_path>
+        <coordination_settings>
+          <operation_timeout_ms>10000</operation_timeout_ms>
+          <session_timeout_ms>30000</session_timeout_ms>
+        </coordination_settings>
+        <raft_configuration>
+        {{- range $i, $e := until (int .Values.clickhouse.replicaCount) }}
+          <server id="{{ add1 $i }}" hostname="{{ include "go2netspectra.fullname" $ }}-clickhouse-{{ $i }}.{{ include "go2netspectra.fullname" $ }}-clickhouse" port="9234"/>
+        {{- end }}
+        </raft_configuration>
+      </keeper_server>
+    </yandex>
+  cluster.xml: |-
+    <yandex>
+      <clickhouse_remote_servers>
+        <gons_cluster>
+          <shard>
+            <internal_replication>true</internal_replication>
+            {{- range $i, $e := until (int .Values.clickhouse.replicaCount) }}
+            <replica>
+              <host>{{ include "go2netspectra.fullname" $ }}-clickhouse-{{ $i }}.{{ include "go2netspectra.fullname" $ }}-clickhouse</host>
+              <port>9000</port>
+            </replica>
+            {{- end }}
+          </shard>
+        </gons_cluster>
+      </clickhouse_remote_servers>
+
+      <macros>
+        <shard from_env="SHARD_ID"/>
+      </macros>
+
+      <zookeeper>
+        {{- range $i, $e := until (int .Values.clickhouse.replicaCount) }}
+        <node index="{{ add1 $i }}" port="9181">
+          <host>{{ include "go2netspectra.fullname" $ }}-clickhouse-{{ $i }}.{{ include "go2netspectra.fullname" $ }}-clickhouse</host>
+        </node>
+        {{- end }}
+      </zookeeper>
+    </yandex>
+{{- end }}

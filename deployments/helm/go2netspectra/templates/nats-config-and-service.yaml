@@ -1,0 +1,49 @@
+{{- if .Values.nats.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-nats
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  clusterIP: None
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+    - name: cluster
+      port: 6222
+      targetPort: 6222
+    - name: monitoring
+      port: 8222
+      targetPort: 8222
+  selector:
+    {{- include "go2netspectra.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-nats-config
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+data:
+  nats.conf: |
+    pid_file: "/var/run/nats/nats.pid"
+    http: 8222
+
+    cluster {
+      name: "gons_nats_cluster"
+      port: 6222
+
+      routes = [
+      {{- range $i, $e := until (int .Values.nats.replicaCount) }}
+        "nats://{{ include "go2netspectra.fullname" $ }}-nats-{{ $i }}.{{ include "go2netspectra.fullname" $ }}-nats:6222",
+      {{- end }}
+      ]
+
+      connect_retries: 30
+    }
+{{- end }}

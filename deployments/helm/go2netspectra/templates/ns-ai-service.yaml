@@ -1,0 +1,22 @@
+{{- if .Values.nsAi.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-ns-ai
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ns-ai
+spec:
+  type: {{ .Values.nsAi.service.type }}
+  ports:
+    - port: {{ .Values.nsAi.service.grpc.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+      {{- if and (eq .Values.nsAi.service.type "NodePort") .Values.nsAi.service.grpc.nodePort }}
+      nodePort: {{ .Values.nsAi.service.grpc.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "go2netspectra.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ns-ai
+{{- end }}

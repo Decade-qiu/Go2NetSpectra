@@ -1,0 +1,145 @@
+# Default values for go2netspectra.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Global application configuration --
+# This block is rendered into the main configmap, with sensitive values replaced by placeholders.
+config:
+  ai:
+    api_key: "your-secret-ai-key" # IMPORTANT: Replace with your actual key
+    model: "gemini-pro"
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+  smtp:
+    host: "smtp.example.com"
+    port: 587
+    username: "your-email@example.com"
+    password: "your-secret-password"
+    from: "notifications@go2netspectra.io"
+    to: "alerts@example.com"
+
+  aggregator:
+    types: ["sketch", "exact"]
+    period: "720h"
+    num_workers: 16
+    size_of_packet_channel: 10000
+
+    sketch:
+      writers:
+        - type: "clickhouse"
+          enabled: true
+          snapshot_interval: "60s"
+          clickhouse:
+            cloud: false
+      tasks:
+        - name: "ss_src_dst"
+          skt_type: 1
+          # ... other task params
+
+    exact:
+      writers:
+        - type: "clickhouse"
+          enabled: true
+          snapshot_interval: "60s"
+          clickhouse:
+            cloud: false
+      tasks:
+        - name: "per_five_tuple"
+          key_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
+          num_shards: 128
+
+# -- Component-specific configurations --
+
+nsEngine:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: decadeqzj/ns-engine
+    pullPolicy: IfNotPresent
+    tag: "v1.0"
+  resources:
+    requests:
+      cpu: 1
+      memory: 128Mi
+    limits:
+      cpu: 4
+      memory: 1024Mi
+
+nsApi:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: decadeqzj/ns-api
+    pullPolicy: IfNotPresent
+    tag: "v1.0"
+  service:
+    type: NodePort
+    grpc:
+      port: 50051
+      nodePort: 30051
+    http:
+      port: 8080
+      nodePort: 30080
+  resources:
+    requests:
+      cpu: 500m
+      memory: 64Mi
+    limits:
+      cpu: 1
+      memory: 256Mi
+
+nsAi:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: decadeqzj/ns-ai
+    pullPolicy: IfNotPresent
+    tag: "v1.0"
+  service:
+    type: NodePort
+    grpc:
+      port: 50052
+      nodePort: 30052
+  resources:
+    requests:
+      cpu: 500m
+      memory: 128Mi
+    limits:
+      cpu: 2
+      memory: 512Mi
+
+nats:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: nats
+    pullPolicy: IfNotPresent
+    tag: "2.10-alpine"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 64Mi
+    limits:
+      cpu: 1
+      memory: 256Mi
+
+clickhouse:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: clickhouse/clickhouse-server
+    pullPolicy: IfNotPresent
+    tag: "23.8"
+  persistence:
+    size: 10Gi
+    storageClassName: "fast-ssd"
+  resources:
+    requests:
+      cpu: 1
+      memory: 512Mi
+    limits:
+      cpu: 4
+      memory: 2Gi

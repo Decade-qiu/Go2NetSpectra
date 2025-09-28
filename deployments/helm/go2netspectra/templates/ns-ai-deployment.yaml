@@ -1,0 +1,40 @@
+{{- if .Values.nsAi.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-ns-ai
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ns-ai
+spec:
+  replicas: {{ .Values.nsAi.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "go2netspectra.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ns-ai
+  template:
+    metadata:
+      labels:
+        {{- include "go2netspectra.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ns-ai
+    spec:
+      containers:
+        - name: ns-ai
+          image: "{{ .Values.nsAi.image.repository }}:{{ .Values.nsAi.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.nsAi.image.pullPolicy }}
+          ports:
+            - containerPort: 50052
+              name: grpc
+          volumeMounts:
+            - name: config-volume
+              mountPath: /configs/
+          envFrom:
+            - secretRef:
+                name: {{ include "go2netspectra.fullname" . }}-secret
+          resources:
+            {{- toYaml .Values.nsAi.resources | nindent 12 }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "go2netspectra.fullname" . }}-config
+{{- end }}

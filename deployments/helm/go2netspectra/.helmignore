@@ -1,0 +1,19 @@
+# Patterns to ignore when building packages.
+# This supports shell glob matching, relative path matching, and negation.
+# Example patterns:
+#
+# # Ignore anything in a .git folder
+# .git/
+#
+# # Ignore all yaml files in the templates folder
+# templates/*.yaml
+#
+# # Ignore all files whose name starts with a dot
+# .*
+#
+# # Ignore all files in the templates folder except for NOTES.txt
+# templates/*
+# !templates/NOTES.txt
+#
+# # Ignore all files in the crds folder
+# crds/

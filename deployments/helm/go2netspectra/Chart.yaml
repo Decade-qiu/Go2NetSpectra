@@ -1,0 +1,16 @@
+apiVersion: v2
+name: go2netspectra
+description: A Helm chart for deploying the Go2NetSpectra network monitoring system.
+
+# A chart can be either an 'application' or a 'library' chart.
+# Application charts are installable by themselves, while library charts provide useful
+# templates and definitions for other charts to use. We are creating an application chart.
+type: application
+
+# This is the chart version. This version number should be incremented each time you make changes
+# to the chart and its templates.
+version: 0.1.0
+
+# This is the version number of the application being deployed. This version number should be
+# incremented each time you make changes to the application code.
+appVersion: "1.0.0"

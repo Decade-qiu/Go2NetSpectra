@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-config
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+data:
+  config.yaml: |-
+    {{- $config := .Values.config | mustDeepCopy -}}
+
+    {{- /* Replace sensitive fields with environment variable placeholders */ -}}
+    {{- $_ := set $config.ai "api_key" "${AI_API_KEY}" -}}
+    {{- $_ := set $config.ai "base_url" "${AI_BASE_URL}" -}}
+    {{- $_ := set $config.smtp "host" "${SMTP_HOST}" -}}
+    {{- $_ := set $config.smtp "port" "${SMTP_PORT}" -}}
+    {{- $_ := set $config.smtp "username" "${SMTP_USER}" -}}
+    {{- $_ := set $config.smtp "password" "${SMTP_PASSWORD}" -}}
+    {{- $_ := set $config.smtp "from" "${SMTP_FROM}" -}}
+    {{- $_ := set $config.smtp "to" "${SMTP_TO}" -}}
+
+    {{- /* Hardcode internal service addresses */ -}}
+    {{- $_ := set $config "probe" (dict "nats_url" "${NATS_URL}") -}}
+    {{- $_ := set $config.alerter.ai_analysis "service_addr" "${ALERTER_AI_SERVICE_ADDR}" -}}
+    {{- $_ := set $config.api "grpc_listen_addr" "${API_GRPC_LISTEN_ADDR}" -}}
+    {{- $_ := set $config.api "http_listen_addr" "${API_HTTP_LISTEN_ADDR}" -}}
+    {{- $_ := set $config.ai "grpc_listen_addr" "${AI_GRPC_LISTEN_ADDR}" -}}
+
+    {{- range $i, $writer := $config.aggregator.exact.writers -}}
+      {{- if eq $writer.type "clickhouse" -}}
+        {{- $_ := set $writer.clickhouse "host" "${CLICKHOUSE_HOST}" -}}
+        {{- $_ := set $writer.clickhouse "port" "${CLICKHOUSE_PORT}" -}}
+        {{- $_ := set $writer.clickhouse "password" "${CLICKHOUSE_PASSWORD}" -}}
+      {{- end -}}
+    {{- end -}}
+
+    {{- range $i, $writer := $config.aggregator.sketch.writers -}}
+      {{- if eq $writer.type "clickhouse" -}}
+        {{- $_ := set $writer.clickhouse "host" "${CLICKHOUSE_HOST}" -}}
+        {{- $_ := set $writer.clickhouse "port" "${CLICKHOUSE_PORT}" -}}
+        {{- $_ := set $writer.clickhouse "password" "${CLICKHOUSE_PASSWORD}" -}}
+      {{- end -}}
+    {{- end -}}
+
+    {{- $config | toYaml | nindent 4 -}}

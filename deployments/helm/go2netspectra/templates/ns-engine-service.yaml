@@ -1,0 +1,14 @@
+{{- if .Values.nsEngine.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-ns-engine
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ns-engine
+spec:
+  selector:
+    {{- include "go2netspectra.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ns-engine
+  clusterIP: None
+{{- end }}

@@ -1,0 +1,46 @@
+{{- if .Values.nsApi.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "go2netspectra.fullname" . }}-ns-api
+  labels:
+    {{- include "go2netspectra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ns-api
+spec:
+  replicas: {{ .Values.nsApi.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "go2netspectra.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ns-api
+  template:
+    metadata:
+      labels:
+        {{- include "go2netspectra.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ns-api
+    spec:
+      initContainers:
+        - name: wait-for-clickhouse
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z -w 2 {{ include "go2netspectra.fullname" . }}-clickhouse 9000; do echo "Waiting for ClickHouse..."; sleep 2; done;']
+      containers:
+        - name: ns-api
+          image: "{{ .Values.nsApi.image.repository }}:{{ .Values.nsApi.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.nsApi.image.pullPolicy }}
+          ports:
+            - containerPort: 50051
+              name: grpc
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: config-volume
+              mountPath: /configs/
+          envFrom:
+            - secretRef:
+                name: {{ include "go2netspectra.fullname" . }}-secret
+          resources:
+            {{- toYaml .Values.nsApi.resources | nindent 12 }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "go2netspectra.fullname" . }}-config
+{{- end }}
