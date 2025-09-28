@@ -184,6 +184,76 @@ go run ./cmd/ns-api/v2/main.go
 # Terminal 5: Start the AI Service
 go run ./cmd/ns-ai/main.go
 
-# Terminal 6: Start the Probe
 sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
+```
+
+---
+
+### Option 3: Deploy on Kubernetes (Advanced)
+
+For a scalable, production-like environment, you can deploy the entire Go2NetSpectra system on a Kubernetes cluster. We provide two methods for this: raw manifests and a Helm chart.
+
+**Prerequisites:**
+- A running Kubernetes cluster.
+- `kubectl` configured to connect to your cluster.
+- [Helm](https://helm.sh/docs/intro/install/) (for the Helm chart method).
+
+#### Method A: Deploy with Raw Manifests
+
+This method uses a script to deploy all the individual Kubernetes YAML files in the correct order. It's useful for understanding the underlying resources.
+
+**Step 1: (Optional) Build and Push Your Own Images**
+
+The default manifests use pre-built images from `decadeqzj` on Docker Hub. If you have made code changes, you will need to build and push your own images to a container registry and update the `image:` field in the corresponding YAML files (`deployments/kubernetes/**/*.yaml`).
+
+**Step 2: Configure Secrets**
+
+Edit `deployments/kubernetes/go2netspectra-secret.yaml` and replace the placeholder values for `AI_API_KEY`, `SMTP`, and `CLICKHOUSE_PASSWORD` with your actual credentials.
+
+**Step 3: Run the Deployment Script**
+
+The script handles the creation of all resources in the correct order, including waiting for stateful services to become ready before deploying applications.
+
+```sh
+# Navigate to the script directory
+cd deployments/kubernetes/
+
+# Make the script executable
+chmod +x deploy-k8s.sh
+
+# Run the script
+./deploy-k8s.sh
+```
+
+#### Method B: Deploy with Helm (Recommended for Production)
+
+This is the recommended method for deploying to Kubernetes, as it provides versioning, easy configuration, and one-click installation/uninstallation.
+
+**Step 1: Configure Values**
+
+Copy the default `values.yaml` to a new file, e.g., `my-values.yaml`, and customize it.
+
+```sh
+cd deployments/helm/go2netspectra/
+cp values.yaml my-values.yaml
+```
+
+Now, edit `my-values.yaml` and fill in your sensitive information under the `config` section, such as `ai.api_key`, `smtp.password`, etc.
+
+**Step 2: Install the Chart**
+
+Use the `helm install` command to deploy the chart. You can specify a release name and your custom values file.
+
+```sh
+# Perform a dry-run first to see the generated manifests
+helm install go2netspectra . --dry-run --debug -f my-values.yaml
+
+# If the dry-run looks good, install the chart
+helm install go2netspectra . -f my-values.yaml
+```
+
+**Step 3: Accessing the Services**
+
+After installation, Helm will print `NOTES.txt` with instructions on how to access the `ns-api` and other services, which are exposed via `NodePort` by default.
+
 ```

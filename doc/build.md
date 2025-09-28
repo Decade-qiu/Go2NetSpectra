@@ -173,3 +173,75 @@ go run ./scripts/gobana/main.go <path_to_dat_file>
 ```sh
 go run ./cmd/ns-probe/main.go --mode=sub
 ```
+
+---
+
+## 5. Kubernetes 部署模式 (高级)
+
+为了在生产或准生产环境中实现高可用和可伸缩的部署，项目提供了完整的 Kubernetes 部署方案。
+
+### 5.1. 环境准备
+
+- 一个正在运行的 Kubernetes 集群。
+- `kubectl` 命令行工具，并已配置好与集群的连接。
+- `helm` 命令行工具 (如果使用 Helm 部署)。
+
+### 5.2. 方法 A: 使用部署脚本 (适用于快速测试)
+
+此方法通过一个 shell 脚本，按正确的依赖顺序应用 `deployments/kubernetes/` 目录下的所有 YAML 清单文件。
+
+**第一步：配置 Secret**
+
+在部署之前，您必须编辑 `deployments/kubernetes/go2netspectra-secret.yaml` 文件，填入您自己的真实凭证，例如 `AI_API_KEY`, `SMTP` 相关字段以及 `CLICKHOUSE_PASSWORD`。
+
+**第二步：运行脚本**
+
+```sh
+# 进入 k8s 部署目录
+cd deployments/kubernetes/
+
+# 赋予脚本执行权限
+chmod +x deploy-k8s.sh
+
+# 执行一键部署
+./deploy-k8s.sh
+```
+
+脚本会自动创建所有资源，并等待 NATS 和 ClickHouse 集群进入就绪状态后，再部署应用服务，最后等待所有应用部署完成。
+
+### 5.3. 方法 B: 使用 Helm Chart (推荐)
+
+Helm 是 Kubernetes 的包管理器，使用 Helm 是进行版本化、可配置化部署的最佳实践。
+
+**第一步：自定义配置**
+
+`go2netspectra` Chart 的所有配置项都在 `deployments/helm/go2netspectra/values.yaml` 文件中。建议复制一份进行修改，以免影响原始文件。
+
+```sh
+cd deployments/helm/go2netspectra/
+cp values.yaml my-custom-values.yaml
+```
+
+然后，编辑 `my-custom-values.yaml`，至少需要修改 `config` 部分的 `ai.api_key`, `smtp` 和 `clickhouse` 的密码等敏感信息。
+
+**第二步：安装 Chart**
+
+使用 `helm install` 命令进行安装。`go2netspectra` 是您为这个部署实例起的名字（Release Name）。
+
+```sh
+# （可选）先用 --dry-run 模式检查将要生成的 K8s 资源是否正确
+helm install go2netspectra . -f my-custom-values.yaml --dry-run --debug
+
+# 如果检查无误，正式安装
+helm install go2netspectra . -f my-custom-values.yaml
+```
+
+**第三步：检查与卸载**
+
+```sh
+# 查看部署状态
+helm status go2netspectra
+
+# 卸载部署
+helm uninstall go2netspectra
+```
