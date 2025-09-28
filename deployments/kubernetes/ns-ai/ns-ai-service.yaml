@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ns-ai
+  labels:
+    app: ns-ai
+spec:
+  selector:
+    app: ns-ai
+  ports:
+    - name: grpc
+      port: 50052
+      targetPort: 50052
+      nodePort: 30052
+  type: NodePort

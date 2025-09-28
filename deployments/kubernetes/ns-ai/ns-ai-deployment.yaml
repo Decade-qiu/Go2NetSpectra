@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ns-ai
+  labels:
+    app: ns-ai
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ns-ai
+  template:
+    metadata:
+      labels:
+        app: ns-ai
+    spec:
+      containers:
+        - name: ns-ai
+          image: decadeqzj/ns-ai:v1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 50052
+              name: grpc
+          volumeMounts:
+            - name: config-volume
+              mountPath: /configs/
+          envFrom:
+            - secretRef:
+                name: go2netspectra-secret
+          resources:
+            requests:
+              cpu: 500m
+              memory: 128Mi
+            limits:
+              cpu: 2
+              memory: 512Mi
+      volumes:
+        - name: config-volume
+          configMap:
+            name: go2netspectra-config
+      

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ns-api
+  labels:
+    app: ns-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ns-api
+  template:
+    metadata:
+      labels:
+        app: ns-api
+    spec:
+      initContainers:
+        - name: wait-for-clickhouse
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z -w 2 clickhouse 9000; do echo \"Waiting for ClickHouse...\"; sleep 2; done;']
+      containers:
+        - name: ns-api
+          image: decadeqzj/ns-api:v1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 50051
+              name: grpc
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: config-volume
+              mountPath: /configs/
+          envFrom:
+            - secretRef:
+                name: go2netspectra-secret
+          resources:
+            requests:
+              cpu: 500m
+              memory: 64Mi
+            limits:
+              cpu: 1
+              memory: 256Mi
+      volumes:
+        - name: config-volume
+          configMap:
+            name: go2netspectra-config
