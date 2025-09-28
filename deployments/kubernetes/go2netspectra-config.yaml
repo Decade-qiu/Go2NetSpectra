@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go2netspectra-config
+  labels:
+    app.kubernetes.io/name: go2netspectra
+data:
+  config.yaml: |-
+    # API Server settings
+    api:
+      # Address for the API server to listen on.
+      grpc_listen_addr: "${API_GRPC_LISTEN_ADDR}"
+      http_listen_addr: "${API_HTTP_LISTEN_ADDR}"
+
+    ai:
+      # API key for the AI service.
+      api_key: "${AI_API_KEY}"
+      # AI model name, e.g., "gpt-4", "gemini-pro"
+      model: "gemini-2.5-flash"
+      # (Optional) Custom base URL for OpenAI-compatible APIs
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      # ns-ai gRPC address 
+      grpc_listen_addr: "${AI_GRPC_LISTEN_ADDR}"
+
+    # Probe settings
+    probe:
+      # NATS server URL for the probe to connect to.
+      nats_url: "${NATS_URL}"
+      # NATS subject to publish raw packet data to.
+      subject: "gons.packets.raw"
+      # Persistence settings for storing raw packets to disk.
+      persistence:
+        enabled: false
+        path: "test/publish" # File path for persisted packets
+        num_workers: 4             # Number of goroutines for writing
+        channel_buffer_size: 10000 # Size of the buffered channel for persistence
+        encoding: "pcap" # Encoding format: "text", "gob", or "pcap"
+
+    # Alerter Configuration
+    alerter:
+      enabled: true
+      check_interval: "600s" # Check for alerts every 30 seconds
+      ai_analysis:
+        enabled: true
+        service_addr: "${ALERTER_AI_SERVICE_ADDR}" # Address of the ns-ai gRPC service
+      rules:
+        - name: "Potential_DDoS_Source_Detected"
+          task_name: "ss_src_dst"
+          metric: "super_spreader_spread"
+          operator: ">"
+          threshold: 5000
+
+        - name: "Potential_Nmap_Scan_Detected"
+          task_name: "cm_src_left"
+          metric: "heavy_hitter_count"
+          operator: ">"
+          threshold: 10
+
+        - name: "Total_Traffic_Spike"
+          task_name: "per_five_tuple"
+          metric: "total_bytes"
+          operator: ">"
+          threshold: 1000000 # 100 MB
+
+    # SMTP Configuration for Email Notifications
+    # IMPORTANT: Replace with your actual SMTP server details.
+    smtp:
+      host: "${SMTP_HOST}"
+      port: ${SMTP_PORT}
+      username: "${SMTP_USER}"
+      password: "${SMTP_PASSWORD}" # Use an app-specific password if required
+      from: "${SMTP_FROM}"
+      to: "${SMTP_TO}" # Comma-separated list of recipients
+
+    # Configuration file for the network traffic aggregator system.
+    aggregator:
+      # Type of aggregator to use. Currently only "exact" is supported.
+      types:
+        - "sketch"
+        - "exact"
+      # The overall measurement period. At the end of each period, all task data is reset.
+      # This should be longer than or equal to the longest writer snapshot_interval.
+      period: "720h"
+
+      # Global settings for the aggregator engine
+      # Number of worker goroutines to process incoming packets.
+      num_workers: 16
+      # Size of the channel buffer for incoming packets.
+      size_of_packet_channel: 10000
+
+      # Configuration block for the "sketch" aggregator type
+      sketch:
+        # All tasks within this block share this snapshot interval and writer list.
+        writers:
+          - type: "text"
+            enabled: false
+            snapshot_interval: "60s"
+            text:
+              root_path: "test/res"
+          - type: "clickhouse"
+            enabled: true
+            snapshot_interval: "60s"
+            clickhouse:
+              host: "${CLICKHOUSE_HOST}"
+              port: ${CLICKHOUSE_PORT}
+              database: "${CLICKHOUSE_DB}"
+              username: "${CLICKHOUSE_USERNAME}"
+              password: "${CLICKHOUSE_PASSWORD}"
+              cloud: false
+        # List of specific aggregation tasks to run.
+        tasks:
+            - name: "ss_src_dst"
+              skt_type: 1
+              flow_fields: ["SrcIP"]
+              element_fields: ["DstIP"]
+              width: 32768
+              depth: 2
+              count_thereshold: 1
+              m : 128
+              size: 5
+              b: 1.08
+              base: 0.5
+            - name: "cm_src_left"
+              skt_type: 0
+              flow_fields: ["SrcIP"]
+              element_fields: ["DstIP", "SrcPort", "DstPort", "Protocol"]
+              width: 32768
+              depth: 2
+              size_thereshold: 4096000
+              count_thereshold: 4096
+
+      # Configuration block for the "exact" aggregator type
+      exact:
+        # All tasks within this block share this snapshot interval and writer list.
+        writers:
+          - type: "gob"
+            enabled: false
+            snapshot_interval: "3600s"
+            gob:
+              root_path: "test/res"
+          - type: "clickhouse"
+            enabled: true
+            snapshot_interval: "60s"
+            clickhouse:
+              host: "${CLICKHOUSE_HOST}"
+              port: ${CLICKHOUSE_PORT}
+              database: "${CLICKHOUSE_DB}"
+              username: "${CLICKHOUSE_USERNAME}"
+              password: "${CLICKHOUSE_PASSWORD}"
+              cloud: false
+        # List of specific aggregation tasks to run.
+        tasks:
+            - name: "per_five_tuple"
+              key_fields: ["SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol"]
+              num_shards: 128
