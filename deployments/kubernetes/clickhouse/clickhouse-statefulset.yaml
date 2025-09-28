@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  labels:
+    app: clickhouse
+spec:
+  serviceName: "clickhouse"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:23.8
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9000
+              name: tcp
+            - containerPort: 8123
+              name: http
+            - containerPort: 9181
+              name: keeper
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: clickhouse-storage
+              mountPath: /var/lib/clickhouse
+            - name: config-volume
+              mountPath: /configs
+          command:
+            - "/bin/sh"
+            - "-ec"
+            - >
+              clickhouse-server
+              --config /configs/config.xml
+              --clusters_config /configs/clusters.xml
+              --user_config /configs/users.xml
+              --keeper_server.enabled 1
+              --keeper_server.node_id $((${HOSTNAME##*-}+1))
+              --keeper_server.bind_host 0.0.0.0
+              --keeper_server.port 9181
+              --keeper_server.replication 3
+      volumes:
+        - name: config-volume
+          configMap:
+            name: clickhouse-config
+  volumeClaimTemplates:
+    - metadata:
+        name: clickhouse-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: fast-ssd

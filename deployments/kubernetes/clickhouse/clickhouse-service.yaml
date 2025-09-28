@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  labels:
+    app: clickhouse
+spec:
+  selector:
+    app: clickhouse
+  ports:
+    - name: tcp
+      port: 9000
+      targetPort: 9000
+    - name: http
+      port: 8123
+      targetPort: 8123
+    - name: keeper
+      port: 9181
+      targetPort: 9181
+  clusterIP: None   # Headless Service

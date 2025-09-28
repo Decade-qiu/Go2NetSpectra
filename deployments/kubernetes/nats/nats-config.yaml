@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-config
+  labels:
+    app: nats
+data:
+  nats.conf: |
+    # NATS Server Configuration File
+    pid_file: "/var/run/nats/nats.pid"
+    http: 8222
+
+    cluster {
+      name: "gons_nats_cluster"
+      port: 6222
+
+      # Routes are the connections to other servers in the cluster.
+      # We can use the headless service DNS to discover the other pods.
+      routes = [
+        "nats://nats-0.nats:6222",
+        "nats://nats-1.nats:6222",
+        "nats://nats-2.nats:6222"
+      ]
+
+      connect_retries: 30
+    }
