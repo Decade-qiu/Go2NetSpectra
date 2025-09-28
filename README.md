@@ -55,11 +55,11 @@ graph TD
         AI_Client[AI Client] -- gRPC Stream --> AI_Service
     end
 
-    style NATS fill:#FFB6C1,stroke:#333,stroke-width:2px
-    style Manager fill:#ADD8E6,stroke:#333,stroke-width:2px
-    style API fill:#90EE90,stroke:#333,stroke-width:2px
-    style Alerter fill:#FFD700,stroke:#333,stroke-width:2px
-    style AI_Service fill:#C9A0DC,stroke:#333,stroke-width:2px
+    style NATS fill:#FFB6C1,stroke:#333,stroke-width:2px,color:#333
+    style Manager fill:#ADD8E6,stroke:#333,stroke-width:2px,color:#333
+    style API fill:#90EE90,stroke:#333,stroke-width:2px,color:#333
+    style Alerter fill:#FFD700,stroke:#333,stroke-width:2px,color:#333
+    style AI_Service fill:#C9A0DC,stroke:#333,stroke-width:2px,color:#333
 ```
 
 - **Data Sources**: The system processes both live traffic via `ns-probe` and offline `pcap` files using `pcap-analyzer`.
