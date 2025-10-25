@@ -51,110 +51,105 @@ Go2NetSpectra operates as a multi-stage, distributed pipeline designed for perfo
 
 ```mermaid
 graph TD
-    subgraph DataPlane["📊 Data Collection Plane"]
-        direction LR
-        Iface["🖧 Network Interface"]
-        Pcap["📁 PCAP Files"]
-        Probe["🔍 ns-probe<br/>Live Capture"]
-        Analyzer["🔬 pcap-analyzer<br/>Offline Analysis"]
-        
-        Iface -->|live traffic| Probe
-        Pcap -->|offline traffic| Analyzer
-        
-        style Iface fill:#FF6B6B,stroke:#C92A2A,stroke-width:2px,color:#fff
-        style Pcap fill:#FF6B6B,stroke:#C92A2A,stroke-width:2px,color:#fff
-        style Probe fill:#FF8787,stroke:#C92A2A,stroke-width:2px,color:#fff
-        style Analyzer fill:#FF8787,stroke:#C92A2A,stroke-width:2px,color:#fff
-    end
+    subgraph DataPlane["📊 Data Collection Plane"]
+        direction LR
+        Iface["🖧 Network Interface"]
+        Pcap["📁 PCAP Files"]
+        Probe["🔍 ns-probe<br/>Live Capture"]
+        Analyzer["🔬 pcap-analyzer<br/>Offline Analysis"]
+        
+        Iface -->|live traffic| Probe
+        Pcap -->|offline traffic| Analyzer
 
-    subgraph MessageBus["🚌 Message Bus"]
-        direction TB
-        NATS["📬 NATS<br/>Message Broker"]
-        
-        style NATS fill:#FFA94D,stroke:#E67700,stroke-width:3px,color:#333
-    end
+        style Iface fill:#fbe9e7,stroke:#d84315,stroke-width:2px,color:#222
+        style Pcap fill:#fbe9e7,stroke:#d84315,stroke-width:2px,color:#222
+        style Probe fill:#ffccbc,stroke:#e64a19,stroke-width:2px,color:#222
+        style Analyzer fill:#ffccbc,stroke:#e64a19,stroke-width:2px,color:#222
+    end
 
-    subgraph ProcessingPlane["⚙️ Processing & Analysis Plane"]
-        direction TB
-        
-        subgraph Engine["🧠 ns-engine: Core Processing"]
-            Manager["📋 Manager<br/>Worker Pool Orchestrator"]
-            
-            style Manager fill:#4ECDC4,stroke:#099268,stroke-width:2px,color:#fff
-        end
-        
-        subgraph Aggregators["📈 Aggregation Tasks"]
-            ExactTask["✓ Exact Task<br/>100% Accurate"]
-            SketchTask["⚡ Sketch Task<br/>Probabilistic<br/>Count-Min/SuperSpread"]
-            
-            style ExactTask fill:#45B7D1,stroke:#0A6B8C,stroke-width:2px,color:#fff
-            style SketchTask fill:#5DADE2,stroke:#1B4965,stroke-width:2px,color:#fff
-        end
-        
-        subgraph Alerting["🚨 Real-time Alerting & AI"]
-            Alerter["⚠️ Alerter<br/>Rule Evaluation"]
-            AI_Service["🤖 ns-ai<br/>AI Analysis Gateway"]
-            Notifier["📧 Notifier<br/>Email/Webhook"]
-            
-            style Alerter fill:#FFD700,stroke:#CC9900,stroke-width:2px,color:#333
-            style AI_Service fill:#C9A0DC,stroke:#6B4BA1,stroke-width:2px,color:#fff
-            style Notifier fill:#FF9E64,stroke:#D97706,stroke-width:2px,color:#fff
-        end
-        
-        subgraph Storage["💾 Storage Layer"]
-            ClickHouse["📊 ClickHouse<br/>Time-Series DB"]
-            
-            style ClickHouse fill:#A8D8EA,stroke:#2B7BB4,stroke-width:2px,color:#333
-        end
-        
-        Manager --> ExactTask
-        Manager --> SketchTask
-        ExactTask -->|snapshot| ClickHouse
-        SketchTask -->|snapshot| ClickHouse
-        ExactTask -->|generates event| Alerter
-        SketchTask -->|generates event| Alerter
-        Alerter -->|gRPC| AI_Service
-        AI_Service -->|enriched analysis| Alerter
-        Alerter -->|formatted alert| Notifier
-        
-        style Engine fill:#e8f5e9,stroke:#4CAF50,stroke-width:2px
-        style Aggregators fill:#e8f5e9,stroke:#4CAF50,stroke-width:2px
-        style Alerting fill:#fff3e0,stroke:#FF9800,stroke-width:2px
-        style Storage fill:#f3e5f5,stroke:#9C27B0,stroke-width:2px
-    end
+    subgraph MessageBus["🚌 Message Bus"]
+        direction TB
+        NATS["📬 NATS<br/>Message Broker"]
+        style NATS fill:#fff3e0,stroke:#fb8c00,stroke-width:3px,color:#222
+    end
 
-    subgraph QueryPlane["🔍 Query & Interaction Plane"]
-        direction TB
-        
-        API["🌐 ns-api<br/>Multi-Query Router"]
-        GrpcClient["📱 gRPC Client<br/>High-Performance"]
-        HttpClient["🌍 HTTP/JSON Client<br/>Grafana Integration"]
-        AI_Client["💬 AI Client<br/>Interactive QA"]
-        
-        Grafana["📊 Grafana<br/>Real-time Dashboards"]
-        
-        style API fill:#90EE90,stroke:#4CAF50,stroke-width:3px,color:#333
-        style GrpcClient fill:#A0D468,stroke:#76A844,stroke-width:2px,color:#fff
-        style HttpClient fill:#A0D468,stroke:#76A844,stroke-width:2px,color:#fff
-        style AI_Client fill:#A0D468,stroke:#76A844,stroke-width:2px,color:#fff
-        style Grafana fill:#FFB366,stroke:#E65100,stroke-width:2px,color:#333
-    end
+    subgraph ProcessingPlane["⚙️ Processing & Analysis Plane"]
+        direction TB
+        
+        subgraph Engine["🧠 ns-engine: Core Processing"]
+            Manager["📋 Manager<br/>Worker Pool Orchestrator"]
+            style Manager fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#222
+        end
+        
+        subgraph Aggregators["📈 Aggregation Tasks"]
+            ExactTask["✓ Exact Task<br/>100% Accurate"]
+            SketchTask["⚡ Sketch Task<br/>Probabilistic<br/>Count-Min/SuperSpread"]
+            style ExactTask fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#222
+            style SketchTask fill:#bbdefb,stroke:#1e88e5,stroke-width:2px,color:#222
+        end
+        
+        subgraph Alerting["🚨 Real-time Alerting & AI"]
+            Alerter["⚠️ Alerter<br/>Rule Evaluation"]
+            AI_Service["🤖 ns-ai<br/>AI Analysis Gateway"]
+            Notifier["📧 Notifier<br/>Email/Webhook"]
+            style Alerter fill:#fff8e1,stroke:#fbc02d,stroke-width:2px,color:#222
+            style AI_Service fill:#ede7f6,stroke:#7e57c2,stroke-width:2px,color:#222
+            style Notifier fill:#ffe0b2,stroke:#f57c00,stroke-width:2px,color:#222
+        end
+        
+        subgraph Storage["💾 Storage Layer"]
+            ClickHouse["📊 ClickHouse<br/>Time-Series DB"]
+            style ClickHouse fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#222
+        end
+        
+        Manager --> ExactTask
+        Manager --> SketchTask
+        ExactTask -->|snapshot| ClickHouse
+        SketchTask -->|snapshot| ClickHouse
+        ExactTask -->|generates event| Alerter
+        SketchTask -->|generates event| Alerter
+        Alerter -->|gRPC| AI_Service
+        AI_Service -->|enriched analysis| Alerter
+        Alerter -->|formatted alert| Notifier
+        
+        %% --- 修改点 1：为 ProcessingPlane 内部的 subgraph 添加 color ---
+        style Engine fill:#f1f8e9,stroke:#388e3c,stroke-width:2px,color:#222
+        style Aggregators fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#222
+        style Alerting fill:#fff8e1,stroke:#fbc02d,stroke-width:2px,color:#222
+        style Storage fill:#ede7f6,stroke:#5e35b1,stroke-width:2px,color:#222
+    end
 
-    Probe -->|Protobuf| NATS
-    Analyzer -->|Protobuf| NATS
-    NATS -->|Protobuf| Manager
-    
-    GrpcClient -->|gRPC| API
-    HttpClient -->|HTTP/JSON| API
-    AI_Client -->|gRPC Stream| AI_Service
-    
-    API -->|SQL queries| ClickHouse
-    Grafana -->|queries| API
-    
-    style DataPlane fill:#ffe8e8,stroke:#C92A2A,stroke-width:2px
-    style MessageBus fill:#fff4e6,stroke:#E67700,stroke-width:2px
-    style ProcessingPlane fill:#f0f9ff,stroke:#0369A1,stroke-width:2px
-    style QueryPlane fill:#f0fdf4,stroke:#15803D,stroke-width:2px
+    subgraph QueryPlane["🔍 Query & Interaction Plane"]
+        direction TB
+        
+        API["🌐 ns-api<br/>Multi-Query Router"]
+        GrpcClient["📱 gRPC Client<br/>High-Performance"]
+        HttpClient["🌍 HTTP/JSON Client<br/>Grafana Integration"]
+        AI_Client["💬 AI Client<br/>Interactive QA"]
+        Grafana["📊 Grafana<br/>Real-time Dashboards"]
+        
+        style API fill:#e8f5e9,stroke:#43a047,stroke-width:3px,color:#222
+        style GrpcClient fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#222
+        style HttpClient fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#222
+        style AI_Client fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#222
+        style Grafana fill:#ffe0b2,stroke:#f57c00,stroke-width:2px,color:#222
+    end
+
+    Probe -->|Protobuf| NATS
+    Analyzer -->|Protobuf| NATS
+    NATS -->|Protobuf| Manager
+    
+    GrpcClient -->|gRPC| API
+    HttpClient -->|HTTP/JSON| API
+    AI_Client -->|gRPC Stream| AI_Service
+    API -->|SQL queries| ClickHouse
+    Grafana -->|queries| API
+
+    %% --- 修改点 2：为顶层 subgraph 添加 color ---
+    style DataPlane fill:#ffebee,stroke:#d32f2f,stroke-width:2px,color:#222
+    style MessageBus fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#222
+    style ProcessingPlane fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#222
+    style QueryPlane fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#222
 ```
 
 ### Core Components
