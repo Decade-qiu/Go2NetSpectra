@@ -25,3 +25,5 @@ GEMINI.md
 
 # Ignore local environment files
 *.env
+.codex
+.agents
