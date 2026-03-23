@@ -44,9 +44,8 @@ func init() {
 				if err != nil {
 					log.Printf("Warning: failed to create writer type '%s': %v, skipping.", writerDef.Type, err)
 					continue
-				} else {
-					log.Printf("ClickHouse writer created for database %s at %s:%d", writerDef.ClickHouse.Database, writerDef.ClickHouse.Host, writerDef.ClickHouse.Port)
 				}
+				log.Printf("ClickHouse writer created for database %s at %s:%d", writerDef.ClickHouse.Database, writerDef.ClickHouse.Host, writerDef.ClickHouse.Port)
 			default:
 				log.Printf("Warning: unknown writer type '%s' in sketch aggregator config, skipping.", writerDef.Type)
 				continue
@@ -67,27 +66,27 @@ func init() {
 // --- Task Implementation ---
 
 const (
-	IPv4ByteSize  = 4
-	IPv6ByteSize  = 16
-	PortByteSize  = 2
-	ProtoByteSize = 1
+	ipv6ByteSize  = 16
+	portByteSize  = 2
+	protoByteSize = 1
 
-	MaxFieldSize = 37 // IPv6(16) + IPv6(16) + Port(2) + Port(2) + Proto(1) = 37
+	maxFieldSize = 37 // IPv6(16) + IPv6(16) + Port(2) + Port(2) + Proto(1) = 37
 )
 
 var (
 	flowPool = sync.Pool{
 		New: func() any {
-			return make([]byte, MaxFieldSize)
+			return make([]byte, maxFieldSize)
 		},
 	}
 	elemPool = sync.Pool{
 		New: func() any {
-			return make([]byte, MaxFieldSize)
+			return make([]byte, maxFieldSize)
 		},
 	}
 )
 
+// Task performs sketch-based aggregation for a configured flow definition.
 type Task struct {
 	name string
 	// flow key fields
@@ -114,17 +113,17 @@ func New(cfg config.SketchTaskDef) model.Task {
 	}
 
 	var sketchImpl statistic.Sketch
-	switch cfg.SktType {
+	switch cfg.SketchType {
 	case 0: // CountMin
 		log.Printf("Creating CountMin Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d) with width %d, depth %d, size_thereshold %d, count_thereshold %d\n",
-			cfg.Name, cfg.FlowFields, flowSize, cfg.ElementFields, elemSize, cfg.Width, cfg.Depth, cfg.SizeThereshold, cfg.CountThereshold)
-		sketchImpl = statistic.NewCountMin(cfg.Width, cfg.Depth, cfg.SizeThereshold, cfg.CountThereshold, flowSize)
+			cfg.Name, cfg.FlowFields, flowSize, cfg.ElementFields, elemSize, cfg.Width, cfg.Depth, cfg.SizeThreshold, cfg.CountThreshold)
+		sketchImpl = statistic.NewCountMin(cfg.Width, cfg.Depth, cfg.SizeThreshold, cfg.CountThreshold, flowSize)
 	case 1: // SuperSpread
 		log.Printf("Creating SuperSpread Sketch '%s' for:\n\tflow fields %v (bytes %d)\n\telement fields %v (bytes %d) with width %d, depth %d, threshold %d, m %d, size %d, base %.2f, b %.2f\n",
-			cfg.Name, cfg.FlowFields, flowSize, cfg.ElementFields, elemSize, cfg.Width, cfg.Depth, cfg.CountThereshold, cfg.M, cfg.Size, cfg.Base, cfg.B)
-		sketchImpl = statistic.NewSuperSpread(cfg.Width, cfg.Depth, cfg.CountThereshold, cfg.M, cfg.Size, cfg.Base, cfg.B, flowSize)
+			cfg.Name, cfg.FlowFields, flowSize, cfg.ElementFields, elemSize, cfg.Width, cfg.Depth, cfg.CountThreshold, cfg.M, cfg.Size, cfg.Base, cfg.B)
+		sketchImpl = statistic.NewSuperSpread(cfg.Width, cfg.Depth, cfg.CountThreshold, cfg.M, cfg.Size, cfg.Base, cfg.B, flowSize)
 	default:
-		log.Fatalf("Unknown sketch type: %d for task %s", cfg.SktType, cfg.Name)
+		log.Fatalf("Unknown sketch type: %d for task %s", cfg.SketchType, cfg.Name)
 	}
 
 	return &Task{
@@ -142,12 +141,12 @@ func (t *Task) Name() string {
 	return t.name
 }
 
-// Fields
+// Fields returns the configured flow fields used to decode heavy hitter records.
 func (t *Task) Fields() []string {
 	return t.flowFields
 }
 
-// Func
+// DecodeFlowFunc returns the decoder used by writers to format heavy hitter flows.
 func (t *Task) DecodeFlowFunc() func(flow []byte, fields []string) string {
 	return t.DecodeFlow
 }
@@ -161,17 +160,19 @@ func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 
 	err := t.generateFlowAndElem(flow, elem, &packetInfo.FiveTuple)
 	if err != nil {
-		log.Printf("Error generating key for task '%s': %v\n", t.name, err)
+		log.Printf("Error generating key for task '%s': %v", t.name, err)
 		return
 	}
 
 	t.sketch.Insert(flow, elem, uint32(packetInfo.Length))
 }
 
+// Query returns the current sketch estimate for the provided encoded flow.
 func (t *Task) Query(flow []byte) uint64 {
 	return t.sketch.Query(flow)
 }
 
+// Snapshot returns the current heavy hitter snapshot from the underlying sketch.
 func (t *Task) Snapshot() any {
 	return t.sketch.HeavyHitters()
 }
@@ -181,6 +182,7 @@ func (t *Task) Reset() {
 	t.sketch.Reset()
 }
 
+// AlerterMsg formats the sketch snapshot into alert content for matching rules.
 func (t *Task) AlerterMsg(rules []config.AlerterRule) string {
 	// Perform a snapshot to get the latest data for evaluation.
 	snapshotData, ok := t.Snapshot().(statistic.HeavyRecord)
@@ -272,29 +274,31 @@ func (t *Task) generateFlowAndElem(flow, elem []byte, ft *model.FiveTuple) error
 	return nil
 }
 
+// EncodeFlow appends a configured five-tuple field into buf and returns the next offset.
 func (t *Task) EncodeFlow(buf []byte, offset int, field string, ft *model.FiveTuple) int {
 	switch field {
 	case "SrcIP":
 		copy(buf[offset:], ft.SrcIP)
-		offset += IPv6ByteSize
+		offset += ipv6ByteSize
 	case "DstIP":
 		copy(buf[offset:], ft.DstIP)
-		offset += IPv6ByteSize
+		offset += ipv6ByteSize
 	case "SrcPort":
 		buf[offset] = byte(ft.SrcPort >> 8)
 		buf[offset+1] = byte(ft.SrcPort & 0xFF)
-		offset += PortByteSize
+		offset += portByteSize
 	case "DstPort":
 		buf[offset] = byte(ft.DstPort >> 8)
 		buf[offset+1] = byte(ft.DstPort & 0xFF)
-		offset += PortByteSize
+		offset += portByteSize
 	case "Protocol":
 		buf[offset] = byte(ft.Protocol)
-		offset += ProtoByteSize
+		offset += protoByteSize
 	}
 	return offset
 }
 
+// DecodeFlow converts an encoded flow back into a human-readable string.
 func (t *Task) DecodeFlow(flow []byte, fields []string) string {
 	var parts []string
 	offset := 0
@@ -302,17 +306,17 @@ func (t *Task) DecodeFlow(flow []byte, fields []string) string {
 	for _, f := range fields {
 		switch f {
 		case "SrcIP", "DstIP":
-			ip := net.IP(flow[offset : offset+IPv6ByteSize])
+			ip := net.IP(flow[offset : offset+ipv6ByteSize])
 			parts = append(parts, ip.String())
-			offset += IPv6ByteSize
+			offset += ipv6ByteSize
 		case "SrcPort", "DstPort":
-			port := binary.BigEndian.Uint16(flow[offset : offset+PortByteSize])
+			port := binary.BigEndian.Uint16(flow[offset : offset+portByteSize])
 			parts = append(parts, strconv.Itoa(int(port)))
-			offset += PortByteSize
+			offset += portByteSize
 		case "Protocol":
 			proto := uint8(flow[offset])
 			parts = append(parts, strconv.Itoa(int(proto)))
-			offset += ProtoByteSize
+			offset += protoByteSize
 		}
 	}
 
@@ -322,11 +326,11 @@ func (t *Task) DecodeFlow(flow []byte, fields []string) string {
 func fieldByteSize(field string) uint32 {
 	switch field {
 	case "SrcIP", "DstIP":
-		return IPv6ByteSize
+		return ipv6ByteSize
 	case "SrcPort", "DstPort":
-		return PortByteSize
+		return portByteSize
 	case "Protocol":
-		return ProtoByteSize
+		return protoByteSize
 	default:
 		return 0
 	}

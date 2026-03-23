@@ -1,15 +1,13 @@
 package manager
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
+	"net"
 	"sync"
 	"testing"
 	"time"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type stubTask struct {
@@ -55,7 +53,7 @@ func (s *stubTask) firstPacket() *model.PacketInfo {
 	return s.packets[0]
 }
 
-func TestManagerProcessProtoPacketRoutesToAllTasks(t *testing.T) {
+func TestManagerProcessPacketRoutesToAllTasks(t *testing.T) {
 	taskA := &stubTask{}
 	taskB := &stubTask{}
 	m := &Manager{
@@ -64,11 +62,11 @@ func TestManagerProcessProtoPacketRoutesToAllTasks(t *testing.T) {
 		},
 	}
 
-	packet := &v1.PacketInfo{
-		Timestamp: timestamppb.New(time.Unix(1700000000, 0)),
-		FiveTuple: &v1.FiveTuple{
-			SrcIp:    []byte{192, 0, 2, 10},
-			DstIp:    []byte{198, 51, 100, 20},
+	packet := &model.PacketInfo{
+		Timestamp: time.Unix(1700000000, 0),
+		FiveTuple: model.FiveTuple{
+			SrcIP:    net.IP{192, 0, 2, 10},
+			DstIP:    net.IP{198, 51, 100, 20},
 			SrcPort:  443,
 			DstPort:  8443,
 			Protocol: 6,
@@ -76,8 +74,8 @@ func TestManagerProcessProtoPacketRoutesToAllTasks(t *testing.T) {
 		Length: 256,
 	}
 
-	if err := m.processProtoPacket(packet); err != nil {
-		t.Fatalf("processProtoPacket() unexpected error: %v", err)
+	if err := m.processPacket(packet); err != nil {
+		t.Fatalf("processPacket() unexpected error: %v", err)
 	}
 
 	for name, task := range map[string]*stubTask{"taskA": taskA, "taskB": taskB} {
@@ -100,7 +98,7 @@ func TestManagerStopDrainsQueuedPackets(t *testing.T) {
 		taskGroups: []factory.TaskGroup{
 			{Tasks: []model.Task{task}},
 		},
-		packetChannel: make(chan *v1.PacketInfo, 1),
+		packetChannel: make(chan *model.PacketInfo, 1),
 		done:          make(chan struct{}),
 		numWorkers:    1,
 	}
@@ -108,11 +106,11 @@ func TestManagerStopDrainsQueuedPackets(t *testing.T) {
 	m.workerWg.Add(1)
 	go m.worker()
 
-	m.packetChannel <- &v1.PacketInfo{
-		Timestamp: timestamppb.New(time.Unix(1700000001, 0)),
-		FiveTuple: &v1.FiveTuple{
-			SrcIp:    []byte{10, 0, 0, 1},
-			DstIp:    []byte{10, 0, 0, 2},
+	m.packetChannel <- &model.PacketInfo{
+		Timestamp: time.Unix(1700000001, 0),
+		FiveTuple: model.FiveTuple{
+			SrcIP:    net.IP{10, 0, 0, 1},
+			DstIP:    net.IP{10, 0, 0, 2},
 			SrcPort:  1234,
 			DstPort:  80,
 			Protocol: 6,

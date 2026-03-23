@@ -3,7 +3,7 @@
 # `internal/api`, deployment assets, and developer/operator documentation.
 api:
   # Address for the API server to listen on.
-  grpc_listen_addr: "${API_GRPC_LISTEN_ADDR}"
+  rpc_listen_addr: "${API_RPC_LISTEN_ADDR}"
   http_listen_addr: "${API_HTTP_LISTEN_ADDR}"
 
 ai:
@@ -15,8 +15,8 @@ ai:
   model: "gemini-2.5-flash"
   # (Optional) Custom base URL for OpenAI-compatible APIs
   base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
-  # ns-ai gRPC address 
-  grpc_listen_addr: "${AI_GRPC_LISTEN_ADDR}"
+  # ns-ai RPC address
+  rpc_listen_addr: "${AI_RPC_LISTEN_ADDR}"
 
 # Probe settings.
 # Transport packet semantics here must stay aligned with `internal/probe`,
@@ -40,7 +40,7 @@ alerter:
   check_interval: "600s" # Check for alerts every 30 seconds
   ai_analysis:
     enabled: true
-    service_addr: "${ALERTER_AI_SERVICE_ADDR}" # Address of the ns-ai gRPC service
+    service_addr: "${ALERTER_AI_SERVICE_ADDR}" # Address of the ns-ai RPC service
   rules:
     - name: "Potential_DDoS_Source_Detected"
       task_name: "ss_src_dst"

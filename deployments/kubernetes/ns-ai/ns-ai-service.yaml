@@ -8,7 +8,7 @@ spec:
   selector:
     app: ns-ai
   ports:
-    - name: grpc
+    - name: rpc
       port: 50052
       targetPort: 50052
       nodePort: 30052

@@ -21,14 +21,16 @@ func NewTextWriter(rootPath string, interval time.Duration) model.Writer {
 	return &TextWriter{rootPath: rootPath, interval: interval}
 }
 
-func (w *TextWriter) GetInterval() time.Duration {
+// Interval returns the configured snapshot interval for this writer.
+func (w *TextWriter) Interval() time.Duration {
 	return w.interval
 }
 
+// Write writes heavy hitter results to text files under the configured snapshot directory.
 func (w *TextWriter) Write(payload interface{}, timestamp, name string, fields []string, decodeFlowFunc func(flow []byte, fields []string) string) error {
 	heavyHitters, ok := payload.(statistic.HeavyRecord)
 	if !ok {
-		return fmt.Errorf("invalid payload type for TextWriter: expected statistic.HeavyRecord, got %T", payload)
+		return fmt.Errorf("invalid payload type for text writer: expected statistic.HeavyRecord, got %T", payload)
 	}
 
 	snapshotDir := filepath.Join(w.rootPath, timestamp)
@@ -52,9 +54,8 @@ func (w *TextWriter) Write(payload interface{}, timestamp, name string, fields [
 			line := fmt.Sprintf("%s %d\n", decodeFlowFunc(hitter.Flow, fields), hitter.Size)
 			if _, err := file.WriteString(line); err != nil {
 				return fmt.Errorf("failed to write heavy hitter to file: %w", err)
-			} else {
-				total++
 			}
+			total++
 		}
 
 		// count
@@ -69,9 +70,8 @@ func (w *TextWriter) Write(payload interface{}, timestamp, name string, fields [
 			line := fmt.Sprintf("%s %d\n", decodeFlowFunc(hitter.Flow, fields), hitter.Count)
 			if _, err := file.WriteString(line); err != nil {
 				return fmt.Errorf("failed to write heavy hitter to file: %w", err)
-			} else {
-				total++
 			}
+			total++
 		}
 	} else {
 		// count
@@ -86,9 +86,8 @@ func (w *TextWriter) Write(payload interface{}, timestamp, name string, fields [
 			line := fmt.Sprintf("%s %d\n", decodeFlowFunc(hitter.Flow, fields), hitter.Count)
 			if _, err := file.WriteString(line); err != nil {
 				return fmt.Errorf("failed to write heavy hitter to file: %w", err)
-			} else {
-				total++
 			}
+			total++
 		}
 	}
 

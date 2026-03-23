@@ -3,12 +3,12 @@ package streamaggregator
 import (
 	"log"
 
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/manager"
+	"Go2NetSpectra/internal/model"
+	"Go2NetSpectra/internal/probe"
 
 	"github.com/nats-io/nats.go"
-	"google.golang.org/protobuf/proto"
 )
 
 // StreamAggregator consumes packets from NATS and uses a model.Manager to aggregate them.
@@ -16,7 +16,7 @@ type StreamAggregator struct {
 	nc           *nats.Conn
 	sub          *nats.Subscription
 	manager      *manager.Manager
-	inputChannel chan<- *v1.PacketInfo
+	inputChannel chan<- *model.PacketInfo
 	natsURL      string
 	natsSubject  string
 }
@@ -82,12 +82,12 @@ func (sa *StreamAggregator) Stop() {
 
 // handlePacket decodes the message and passes it to the manager's channel.
 func (sa *StreamAggregator) handlePacket(msg *nats.Msg) {
-	var pbPacket v1.PacketInfo
-	if err := proto.Unmarshal(msg.Data, &pbPacket); err != nil {
-		log.Printf("Error unmarshalling protobuf: %v", err)
+	packet, err := probe.UnmarshalPacketInfo(msg.Data)
+	if err != nil {
+		log.Printf("Error unmarshalling thrift packet: %v", err)
 		return
 	}
 
-	// Pass the protobuf packet to the manager's channel for concurrent processing.
-	sa.inputChannel <- &pbPacket
+	// Pass the decoded packet to the manager's channel for concurrent processing.
+	sa.inputChannel <- &packet
 }

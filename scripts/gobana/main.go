@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type Flow struct {
+type flow struct {
 	Key         string
 	StartTime   time.Time
 	EndTime     time.Time
@@ -31,7 +31,7 @@ func main() {
 
 	decoder := gob.NewDecoder(file)
 
-	var mp map[string]Flow
+	var mp map[string]flow
 
 	err = decoder.Decode(&mp)
 	if err != nil {

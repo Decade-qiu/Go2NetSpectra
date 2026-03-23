@@ -24,7 +24,7 @@ spec:
           imagePullPolicy: {{ .Values.nsAi.image.pullPolicy }}
           ports:
             - containerPort: 50052
-              name: grpc
+              name: rpc
           volumeMounts:
             - name: config-volume
               mountPath: /configs/

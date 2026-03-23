@@ -1,7 +1,6 @@
 package sketch
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/model"
@@ -24,24 +23,24 @@ func TestSuperSpread(t *testing.T) {
 	defer pcapReader.Close()
 	log.Printf("Reading packets from '%s'...", pcapFilePath)
 
-	packetChannel := make(chan *v1.PacketInfo, 10000)
+	packetChannel := make(chan *model.PacketInfo, 10000)
 
 	SpreadThreshold := uint32(750)
 
 	// Initialize SuperSpread sketch
 	cfg := config.SketchTaskDef{
-		Name:            "per_src_flow",
-		SktType:         1,
-		FlowFields:      []string{"DstIP"},
-		ElementFields:   []string{"SrcIP"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  0,
-		CountThereshold: 750,
-		M:               128,
-		Base:            0.5,
-		Size:            5,
-		B:               1.08,
+		Name:           "per_src_flow",
+		SketchType:     1,
+		FlowFields:     []string{"DstIP"},
+		ElementFields:  []string{"SrcIP"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  0,
+		CountThreshold: 750,
+		M:              128,
+		Base:           0.5,
+		Size:           5,
+		B:              1.08,
 	}
 
 	task := New(cfg)
@@ -52,19 +51,7 @@ func TestSuperSpread(t *testing.T) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		for pbPacket := range packetChannel {
-			info := &model.PacketInfo{
-				Timestamp: pbPacket.Timestamp.AsTime(),
-				Length:    int(pbPacket.Length),
-				FiveTuple: model.FiveTuple{
-					SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-					DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-					SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-					DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-					Protocol: uint8(pbPacket.FiveTuple.Protocol),
-				},
-			}
-
+		for info := range packetChannel {
 			task.ProcessPacket(info)
 
 			key := info.FiveTuple.DstIP.String()
@@ -150,17 +137,17 @@ func TestSuperSpread(t *testing.T) {
 
 func TestSuperSpreadResetKeepsTaskUsable(t *testing.T) {
 	task := New(config.SketchTaskDef{
-		Name:            "fixture-super-spread",
-		SktType:         1,
-		FlowFields:      []string{"DstIP"},
-		ElementFields:   []string{"SrcIP"},
-		Width:           64,
-		Depth:           2,
-		CountThereshold: 1,
-		M:               16,
-		Size:            5,
-		Base:            0.5,
-		B:               1.08,
+		Name:           "fixture-super-spread",
+		SketchType:     1,
+		FlowFields:     []string{"DstIP"},
+		ElementFields:  []string{"SrcIP"},
+		Width:          64,
+		Depth:          2,
+		CountThreshold: 1,
+		M:              16,
+		Size:           5,
+		Base:           0.5,
+		B:              1.08,
 	})
 
 	packet := &model.PacketInfo{
@@ -202,23 +189,13 @@ func feedFixturePackets(t *testing.T, pcapFilePath string, task model.Task) {
 	}
 	defer pcapReader.Close()
 
-	packetChannel := make(chan *v1.PacketInfo, 1024)
+	packetChannel := make(chan *model.PacketInfo, 1024)
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
-		for pbPacket := range packetChannel {
-			task.ProcessPacket(&model.PacketInfo{
-				Timestamp: pbPacket.Timestamp.AsTime(),
-				Length:    int(pbPacket.Length),
-				FiveTuple: model.FiveTuple{
-					SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-					DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-					SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-					DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-					Protocol: uint8(pbPacket.FiveTuple.Protocol),
-				},
-			})
+		for packet := range packetChannel {
+			task.ProcessPacket(packet)
 		}
 	}()
 

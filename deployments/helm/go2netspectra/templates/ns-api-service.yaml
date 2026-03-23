@@ -9,12 +9,12 @@ metadata:
 spec:
   type: {{ .Values.nsApi.service.type }}
   ports:
-    - port: {{ .Values.nsApi.service.grpc.port }}
-      targetPort: grpc
+    - port: {{ .Values.nsApi.service.rpc.port }}
+      targetPort: rpc
       protocol: TCP
-      name: grpc
-      {{- if and (eq .Values.nsApi.service.type "NodePort") .Values.nsApi.service.grpc.nodePort }}
-      nodePort: {{ .Values.nsApi.service.grpc.nodePort }}
+      name: rpc
+      {{- if and (eq .Values.nsApi.service.type "NodePort") .Values.nsApi.service.rpc.nodePort }}
+      nodePort: {{ .Values.nsApi.service.rpc.nodePort }}
       {{- end }}
     - port: {{ .Values.nsApi.service.http.port }}
       targetPort: http

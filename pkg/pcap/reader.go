@@ -1,9 +1,7 @@
 package pcap
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/model"
-	"Go2NetSpectra/internal/probe"
 	"Go2NetSpectra/internal/protocol"
 	"log"
 
@@ -33,7 +31,7 @@ func (r *Reader) Close() {
 
 // ReadPackets reads all packets from the pcap file and sends the parsed
 // PacketInfo to the provided channel.
-func (r *Reader) ReadPackets(out chan<- *v1.PacketInfo) {
+func (r *Reader) ReadPackets(out chan<- *model.PacketInfo) {
 	defer func() {
 		log.Println("Total packets read:", r.total, "Failed to parse:", r.failed)
 	}()
@@ -45,11 +43,6 @@ func (r *Reader) ReadPackets(out chan<- *v1.PacketInfo) {
 			r.failed++
 			continue
 		}
-		pbPacket, err := probe.PacketInfoToProto(&packetInfo)
-		if err != nil {
-			r.failed++
-			continue
-		}
-		out <- pbPacket
+		out <- &packetInfo
 	}
 }

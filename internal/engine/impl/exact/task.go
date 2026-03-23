@@ -64,10 +64,9 @@ func init() {
 // --- Task Implementation ---
 
 const (
-	IPv4ByteSize  = 4
-	IPv6ByteSize  = 16
-	PortByteSize  = 2
-	ProtoByteSize = 1
+	ipv6ByteSize  = 16
+	portByteSize  = 2
+	protoByteSize = 1
 )
 
 const defaultShardCount = 256
@@ -84,7 +83,7 @@ type Task struct {
 
 // New creates a new exact aggregation task.
 func New(name string, keyFields []string, numShards uint32) model.Task {
-	if numShards <= 0 || numShards >= 32768 {
+	if numShards == 0 || numShards >= 32768 {
 		numShards = defaultShardCount
 	}
 	log.Printf("Creating ExactTask '%s' with %d shards for keys: %v", name, numShards, keyFields)
@@ -108,12 +107,12 @@ func (t *Task) Name() string {
 	return t.name
 }
 
-// Fields
+// Fields returns nil because exact tasks do not need a serialized flow field list.
 func (t *Task) Fields() []string {
-	return []string{}
+	return nil
 }
 
-// Func
+// DecodeFlowFunc returns a no-op decoder because exact snapshots already store decoded fields.
 func (t *Task) DecodeFlowFunc() func(flow []byte, fields []string) string {
 	return func(flow []byte, fields []string) string {
 		return ""
@@ -124,7 +123,7 @@ func (t *Task) DecodeFlowFunc() func(flow []byte, fields []string) string {
 func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 	fields, key, err := t.generateKeyAndFields(packetInfo.FiveTuple)
 	if err != nil {
-		log.Printf("Error generating key for task '%s': %v\n", t.name, err)
+		log.Printf("Error generating key for task '%s': %v", t.name, err)
 		return
 	}
 
@@ -299,25 +298,24 @@ func check(value, threshold float64, operator string) bool {
 	}
 }
 
-// Empty
-// Just to satisfy the interface
+// Query looks up the aggregated counters for the provided encoded flow key.
 func (t *Task) Query(flow []byte) uint64 {
 	parts := make([]string, len(t.keyFields))
 	index := 0
 	for i, fieldName := range t.keyFields {
 		switch fieldName {
 		case "SrcIP", "DstIP":
-			val := net.IP(flow[index : index+IPv6ByteSize]).String()
+			val := net.IP(flow[index : index+ipv6ByteSize]).String()
 			parts[i] = val
-			index += IPv6ByteSize
+			index += ipv6ByteSize
 		case "SrcPort", "DstPort":
 			val := uint16(flow[index])<<8 | uint16(flow[index+1])
 			parts[i] = strconv.Itoa(int(val))
-			index += PortByteSize
+			index += portByteSize
 		case "Protocol":
 			val := uint8(flow[index])
 			parts[i] = strconv.Itoa(int(val))
-			index += ProtoByteSize
+			index += protoByteSize
 		default:
 			return 0
 		}

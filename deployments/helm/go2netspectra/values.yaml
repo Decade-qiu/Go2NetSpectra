@@ -79,7 +79,7 @@ nsApi:
     tag: "v1.0"
   service:
     type: NodePort
-    grpc:
+    rpc:
       port: 50051
       nodePort: 30051
     http:
@@ -102,7 +102,7 @@ nsAi:
     tag: "v1.0"
   service:
     type: NodePort
-    grpc:
+    rpc:
       port: 50052
       nodePort: 30052
   resources:

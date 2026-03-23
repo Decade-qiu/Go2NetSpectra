@@ -1,7 +1,6 @@
 package sketch
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/model"
@@ -25,20 +24,20 @@ func TestCountMin(t *testing.T) {
 	defer pcapReader.Close()
 	log.Printf("Reading packets from '%s'...", pcapFilePath)
 
-	packetChannel := make(chan *v1.PacketInfo, 10000)
+	packetChannel := make(chan *model.PacketInfo, 10000)
 
 	// Initialize CountMin sketch
 	Counthreshold := uint32(4096)
 	Sizethreshold := uint32(4096 * 1024)
 	cfg := config.SketchTaskDef{
-		Name:            "per_src_flow",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  Sizethreshold,
-		CountThereshold: Counthreshold,
+		Name:           "per_src_flow",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  Sizethreshold,
+		CountThreshold: Counthreshold,
 	}
 
 	task := New(cfg)
@@ -50,19 +49,7 @@ func TestCountMin(t *testing.T) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		for pbPacket := range packetChannel {
-			info := &model.PacketInfo{
-				Timestamp: pbPacket.Timestamp.AsTime(),
-				Length:    int(pbPacket.Length),
-				FiveTuple: model.FiveTuple{
-					SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-					DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-					SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-					DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-					Protocol: uint8(pbPacket.FiveTuple.Protocol),
-				},
-			}
-
+		for info := range packetChannel {
 			task.ProcessPacket(info)
 
 			key := info.FiveTuple.SrcIP.String()
@@ -178,14 +165,14 @@ func TestCountMin(t *testing.T) {
 
 func TestCountMinFixtureProducesHeavyHitterSnapshot(t *testing.T) {
 	cfg := config.SketchTaskDef{
-		Name:            "fixture-heavy-hitter",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP"},
-		Width:           1 << 8,
-		Depth:           2,
-		SizeThereshold:  1,
-		CountThereshold: 1,
+		Name:           "fixture-heavy-hitter",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP"},
+		Width:          1 << 8,
+		Depth:          2,
+		SizeThreshold:  1,
+		CountThreshold: 1,
 	}
 
 	task := New(cfg)

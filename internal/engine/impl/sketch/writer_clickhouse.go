@@ -47,7 +47,8 @@ func NewClickHouseWriter(cfg config.ClickHouseConfig, interval time.Duration) (m
 	return &ClickHouseWriter{conn: conn, interval: interval}, nil
 }
 
-func (w *ClickHouseWriter) GetInterval() time.Duration {
+// Interval returns the configured snapshot interval for this writer.
+func (w *ClickHouseWriter) Interval() time.Duration {
 	return w.interval
 }
 
@@ -84,7 +85,7 @@ func connect(cfg config.ClickHouseConfig) (driver.Conn, error) {
 func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fields []string, decodeFlowFunc func(flow []byte, fields []string) string) error {
 	heavyHitters, ok := payload.(statistic.HeavyRecord)
 	if !ok {
-		return fmt.Errorf("invalid payload type for ClickHouse Writer: expected statistic.HeavyRecord, got %T", payload)
+		return fmt.Errorf("invalid payload type for clickhouse writer: expected statistic.HeavyRecord, got %T", payload)
 	}
 
 	total := len(heavyHitters.Size) + len(heavyHitters.Count)

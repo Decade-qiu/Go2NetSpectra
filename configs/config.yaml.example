@@ -67,7 +67,7 @@ aggregator:
 
 # API server configuration.
 api:
-  grpc_listen_addr: ":50051"
+  rpc_listen_addr: ":50051"
   http_listen_addr: ":8080"
 
 # SMTP configuration for email notifications.
@@ -86,7 +86,7 @@ alerter:
   # AI Analysis configuration for enriching alerts.
   ai_analysis:
     enabled: false
-    service_addr: ":50052" # Address of the ns-ai gRPC service
+    service_addr: ":50052" # Address of the ns-ai RPC service
   rules:
     - name: "high_traffic_source"
       task_name: "per_src_ip" # Must match a task name from the aggregator section
@@ -96,8 +96,8 @@ alerter:
 
 # AI Analysis Service Configuration
 ai:
-  # gRPC listen address for the ns-ai service
-  grpc_listen_addr: ":50052"
+  # RPC listen address for the ns-ai service
+  rpc_listen_addr: ":50052"
   # OpenAI compatible API configuration
   openai:
     # API key for the AI service. It is recommended to use environment variables.

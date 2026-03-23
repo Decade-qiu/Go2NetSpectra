@@ -49,7 +49,7 @@ func NewPublisher(cfg config.ProbeConfig) (*Publisher, error) {
 	return p, nil
 }
 
-// Publish serializes a PacketInfo to Protobuf and publishes it to the configured NATS subject.
+// Publish serializes a PacketInfo to Thrift and publishes it to the configured NATS subject.
 // If persistence is enabled, it also enqueues the packet for local writing.
 func (p *Publisher) Publish(rawPacket gopacket.Packet, packetInfo *model.PacketInfo) error {
 	// Asynchronously write to local file if persistence is enabled

@@ -77,12 +77,16 @@ func (w *Worker) start(cfg config.PersistenceConfig) error {
 		// A better solution would be to pass the link type from the capture source.
 		pcapWriter := pcapgo.NewWriter(file)
 		if err := pcapWriter.WriteFileHeader(1600, layers.LinkTypeEthernet); err != nil {
-			_ = file.Close()
+			if closeErr := file.Close(); closeErr != nil {
+				log.Printf("PersistentWorker: Error closing file after pcap header failure: %v", closeErr)
+			}
 			return fmt.Errorf("failed to write pcap file header: %w", err)
 		}
 		workerFunc = w.runPcapWorker(pcapWriter)
 	default:
-		_ = file.Close()
+		if closeErr := file.Close(); closeErr != nil {
+			log.Printf("PersistentWorker: Error closing file after worker setup failure: %v", closeErr)
+		}
 		return fmt.Errorf("unknown persistence encoding: %s", cfg.Encoding)
 	}
 
@@ -156,7 +160,9 @@ func (w *Worker) runTextWorker(file *os.File) {
 			log.Printf("PersistentWorker (text): Error writing packet: %v", err)
 		}
 	}
-	writer.Flush()
+	if err := writer.Flush(); err != nil {
+		log.Printf("PersistentWorker (text): Error flushing writer: %v", err)
+	}
 }
 
 func (w *Worker) runPcapWorker(pcapWriter *pcapgo.Writer) func(*os.File) {

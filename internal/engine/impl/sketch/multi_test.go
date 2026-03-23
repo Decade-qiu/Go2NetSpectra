@@ -1,7 +1,6 @@
 package sketch
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/model"
@@ -25,20 +24,20 @@ func TestMultiProcess(t *testing.T) {
 	defer pcapReader.Close()
 	log.Printf("Reading packets from '%s'...", pcapFilePath)
 
-	packetChannel := make(chan *v1.PacketInfo, 10000)
+	packetChannel := make(chan *model.PacketInfo, 10000)
 
 	CountThreshold := uint32(4096)
 	SizeThreshold := uint32(4096 * 1024)
 
 	task := New(config.SketchTaskDef{
-		Name:            "per_src_flow",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  SizeThreshold,
-		CountThereshold: CountThreshold,
+		Name:           "per_src_flow",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  SizeThreshold,
+		CountThreshold: CountThreshold,
 	})
 
 	// Ground truth (map-based)
@@ -53,19 +52,7 @@ func TestMultiProcess(t *testing.T) {
 	for range numWorkers {
 		go func() {
 			defer wg.Done()
-			for pbPacket := range packetChannel {
-				info := &model.PacketInfo{
-					Timestamp: pbPacket.Timestamp.AsTime(),
-					Length:    int(pbPacket.Length),
-					FiveTuple: model.FiveTuple{
-						SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-						DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-						SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-						DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-						Protocol: uint8(pbPacket.FiveTuple.Protocol),
-					},
-				}
-
+			for info := range packetChannel {
 				// Insert into sketch
 				task.ProcessPacket(info)
 
@@ -202,24 +189,24 @@ func TestMultiProcessSS(t *testing.T) {
 	defer pcapReader.Close()
 	log.Printf("Reading packets from '%s'...", pcapFilePath)
 
-	packetChannel := make(chan *v1.PacketInfo, 10000)
+	packetChannel := make(chan *model.PacketInfo, 10000)
 
 	SpreadThreshold := uint32(512)
 
 	// Initialize SuperSpread sketch
 	cfg := config.SketchTaskDef{
-		Name:            "SuperSpread",
-		SktType:         1,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP"},
-		Width:           32768,
-		Depth:           2,
-		SizeThereshold:  0,
-		CountThereshold: 512,
-		M:               128,
-		Base:            0.5,
-		Size:            5,
-		B:               1.08,
+		Name:           "SuperSpread",
+		SketchType:     1,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP"},
+		Width:          32768,
+		Depth:          2,
+		SizeThreshold:  0,
+		CountThreshold: 512,
+		M:              128,
+		Base:           0.5,
+		Size:           5,
+		B:              1.08,
 	}
 
 	task := New(cfg)
@@ -236,19 +223,7 @@ func TestMultiProcessSS(t *testing.T) {
 	for range numWorkers {
 		go func() {
 			defer wg.Done()
-			for pbPacket := range packetChannel {
-				info := &model.PacketInfo{
-					Timestamp: pbPacket.Timestamp.AsTime(),
-					Length:    int(pbPacket.Length),
-					FiveTuple: model.FiveTuple{
-						SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-						DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-						SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-						DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-						Protocol: uint8(pbPacket.FiveTuple.Protocol),
-					},
-				}
-
+			for info := range packetChannel {
 				// Insert into sketch
 				task.ProcessPacket(info)
 

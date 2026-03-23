@@ -1,6 +1,6 @@
 # Go2NetSpectra
 
-[![Go](https://img.shields.io/badge/go-1.21%2B-blue.svg)](https://go.dev/) [![gopacket](https://img.shields.io/badge/gopacket-1.1.19-blue.svg)](https://github.com/google/gopacket) [![NATS](https://img.shields.io/badge/NATS-2.11%2B-green.svg)](https://nats.io/) [![Protobuf](https://img.shields.io/badge/Protobuf-v3-blue.svg)](https://protobuf.dev/) [![ClickHouse](https://img.shields.io/badge/ClickHouse-23.0%2B-yellow.svg)](https://clickhouse.com/) [![Grafana](https://img.shields.io/badge/Grafana-10.0%2B-orange.svg)](https://grafana.com/) [![Docker](https://img.shields.io/badge/docker-20.10%2B-blue)](https://www.docker.com/) [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.27%2B-blue.svg)](https://kubernetes.io/) [![License](https://img.shields.io/badge/license-Apache-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.21%2B-blue.svg)](https://go.dev/) [![gopacket](https://img.shields.io/badge/gopacket-1.1.19-blue.svg)](https://github.com/google/gopacket) [![NATS](https://img.shields.io/badge/NATS-2.11%2B-green.svg)](https://nats.io/) [![Thrift](https://img.shields.io/badge/Thrift-0.22%2B-blue.svg)](https://thrift.apache.org/) [![ClickHouse](https://img.shields.io/badge/ClickHouse-23.0%2B-yellow.svg)](https://clickhouse.com/) [![Grafana](https://img.shields.io/badge/Grafana-10.0%2B-orange.svg)](https://grafana.com/) [![Docker](https://img.shields.io/badge/docker-20.10%2B-blue)](https://www.docker.com/) [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.27%2B-blue.svg)](https://kubernetes.io/) [![License](https://img.shields.io/badge/license-Apache-blue.svg)](LICENSE)
 
 ## 📖 Overview
 
@@ -23,14 +23,14 @@ By leveraging a high-speed data pipeline, a flexible pluggable aggregation engin
 - **⚙️ High-Performance by Design**: Built from the ground up for performance:
   - Lock-free atomic operations in sketches
   - Worker pool concurrency with optimal goroutine scheduling
-  - Efficient Protobuf serialization
+  - Efficient Thrift serialization
   - Zero-copy data handling where possible
 
 - **📊 Full-Stack Observability**: Built-in support for:
   - Real-time Grafana dashboards
   - Structured alerting with webhooks
   - Multiple data backends (ClickHouse, File-based storage)
-  - Comprehensive query APIs (gRPC + HTTP/JSON)
+  - Comprehensive query APIs (Thrift RPC + HTTP/JSON)
 
 - **🚀 Scalable & Distributed**: All components are decoupled and horizontally scalable:
   - NATS for message bus decoupling
@@ -108,7 +108,7 @@ graph TD
         SketchTask -->|snapshot| ClickHouse
         ExactTask -->|generates event| Alerter
         SketchTask -->|generates event| Alerter
-        Alerter -->|gRPC| AI_Service
+        Alerter -->|Thrift RPC| AI_Service
         AI_Service -->|enriched analysis| Alerter
         Alerter -->|formatted alert| Notifier
         
@@ -123,7 +123,7 @@ graph TD
         direction TB
         
         API["🌐 ns-api<br/>Multi-Query Router"]
-        GrpcClient["📱 gRPC Client<br/>High-Performance"]
+        GrpcClient["📱 RPC Client<br/>High-Performance"]
         HttpClient["🌍 HTTP/JSON Client<br/>Grafana Integration"]
         AI_Client["💬 AI Client<br/>Interactive QA"]
         Grafana["📊 Grafana<br/>Real-time Dashboards"]
@@ -135,13 +135,13 @@ graph TD
         style Grafana fill:#ffe0b2,stroke:#f57c00,stroke-width:2px,color:#222
     end
 
-    Probe -->|Protobuf| NATS
-    Analyzer -->|Protobuf| NATS
-    NATS -->|Protobuf| Manager
-    
-    GrpcClient -->|gRPC| API
+    Probe -->|Thrift| NATS
+    Analyzer -->|Thrift| NATS
+    NATS -->|Thrift| Manager
+   
+    GrpcClient -->|Thrift RPC| API
     HttpClient -->|HTTP/JSON| API
-    AI_Client -->|gRPC Stream| AI_Service
+    AI_Client -->|Session + Chunks| AI_Service
     API -->|SQL queries| ClickHouse
     Grafana -->|queries| API
 
@@ -158,7 +158,7 @@ graph TD
 | :--- | :--- | :--- |
 | **ns-probe** | Data collection | Live packet capture, offline PCAP analysis, async persistence |
 | **ns-engine** | Core processing | Worker pools, pluggable aggregators, real-time alerts |
-| **ns-api** | Query gateway | Multi-source routing, gRPC + HTTP, Grafana integration |
+| **ns-api** | Query gateway | Multi-source routing, Thrift RPC + HTTP, Grafana integration |
 | **ns-ai** | AI analysis | LLM integration, alert enrichment, threat assessment |
 | **NATS** | Message bus | Low-latency pub/sub, decoupling, horizontal scaling |
 | **ClickHouse** | Data warehouse | Time-series storage, fast aggregations, cost-effective |
@@ -170,7 +170,7 @@ graph TD
 
 - `cmd/` packages are process wiring only. Shared runtime assembly belongs in `internal/api`, `internal/ai`, or `internal/engine/app`.
 - `internal/probe` and `pkg/pcap` own transport packet conversion; `internal/engine/manager` owns fan-out and lifecycle orchestration.
-- `api/proto/v1/`, `configs/config.yaml`, Docker Compose values, and Helm values are synchronized product surfaces. Any behavioral key change must update all affected runtime and deployment assets together.
+- `api/thrift/v1/`, `configs/config.yaml`, Docker Compose values, and Helm values are synchronized product surfaces. Any behavioral key change must update all affected runtime and deployment assets together.
 - Use [module-boundaries.md](doc/refactor/module-boundaries.md) for the current ownership map and [build.md](doc/build.md) for validation entrypoints.
 
 ---
@@ -184,7 +184,7 @@ Choose the deployment option that best fits your needs.
 | Tool | Version | Purpose |
 | :--- | :--- | :--- |
 | **Go** | 1.21+ | Application runtime |
-| **protoc** | 3.0+ | Protobuf compilation |
+| **thrift** | 0.22+ | Thrift IDL compilation |
 | **Docker** | 20.10+ | Container runtime |
 | **Docker Compose** | 1.29+ | Container orchestration |
 | **kubectl** | 1.27+ (optional) | Kubernetes management |
@@ -201,7 +201,7 @@ cp configs/.env.example .env
 # Edit with your settings
 # NATS_URL=nats://localhost:4222
 # CLICKHOUSE_HOST=localhost
-# API_GRPC_LISTEN_ADDR=localhost:50051
+# API_RPC_LISTEN_ADDR=localhost:50051
 # AI_API_KEY=your-openai-key
 # SMTP_PASSWORD=your-smtp-password
 ```
@@ -356,7 +356,7 @@ helm uninstall go2netspectra
 
 | Document | Content |
 | :--- | :--- |
-| **[`doc/build.md`](doc/build.md)** | Comprehensive build, environment setup, and deployment guide. Includes Protobuf generation, local development, Docker Compose, and Kubernetes instructions. |
+| **[`doc/build.md`](doc/build.md)** | Comprehensive build, environment setup, and deployment guide. Includes Thrift generation, local development, Docker Compose, and Kubernetes instructions. |
 | **[`doc/technology.md`](doc/technology.md)** | In-depth technical architecture, design decisions, performance optimizations, and algorithm implementations. Covers the hybrid analysis engine, AI integration, and performance benchmarks. |
 | **[`doc/re.md`](doc/re.md)** | Requirements specification, feature list, project roadmap, and evolutionary milestones. Explains the vision and development phases. |
 
@@ -449,7 +449,7 @@ Benchmark results (Intel i7-14700, 30M+ packet dataset):
 - Lock-free atomic operations (CAS) in Count-Min
 - Object pooling with `sync.Pool` for temporary allocations
 - Goroutine worker pools for parallel processing
-- Efficient Protobuf serialization
+- Efficient Thrift serialization
 
 ---
 
@@ -551,17 +551,14 @@ go run ./scripts/query/v2/main.go --help
 
 ## 🧪 Testing & Validation
 
-### Run Protobuf Generation (If Modifying .proto Files)
+### Run Thrift Generation (If Modifying IDL Files)
 
 ```bash
-# Install plugins
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
-
 # Generate code
-protoc --proto_path=api/proto \
-       --go_out=. --go-grpc_out=. \
-       api/proto/v1/*.proto
+thrift --gen go -out api/gen/thrift api/thrift/v1/traffic.thrift
+thrift --gen go -out api/gen/thrift api/thrift/v1/query.thrift
+thrift --gen go -out api/gen/thrift api/thrift/v1/ai.thrift
+rm -rf api/gen/thrift/v1/*-remote
 ```
 
 ### Run Algorithm Benchmarks

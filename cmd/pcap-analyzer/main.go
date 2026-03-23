@@ -2,7 +2,7 @@ package main
 
 import (
 	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/app"
+	"Go2NetSpectra/internal/engine/offline"
 	"fmt"
 	"log"
 	"os"
@@ -23,7 +23,7 @@ func main() {
 	}
 	log.Println("Configuration loaded successfully.")
 
-	if err := app.RunOfflineAnalyzer(cfg, pcapFilePath); err != nil {
+	if err := offline.RunAnalyzer(cfg, pcapFilePath); err != nil {
 		log.Fatalf("Offline analyzer exited with error: %v", err)
 	}
 }

@@ -11,7 +11,7 @@
 在开始之前，请确保您的开发环境中已安装以下工具：
 
 - **Go**: 版本 `1.25` 或更高。请通过 `go version` 命令确认。
-- **Protobuf Compiler (`protoc`)**: 用于将 `.proto` 文件编译成 Go 代码。请从 [Protobuf GitHub Releases](https://github.com/protocolbuffers/protobuf/releases) 下载并安装。
+- **Apache Thrift Compiler (`thrift`)**: 用于将 `.thrift` 文件编译成 Go 代码。请从 [Apache Thrift](https://thrift.apache.org/) 安装 `0.22` 或更高版本。
 - **Docker**: 用于快速启动 NATS、ClickHouse 等依赖服务，以及进行容器化部署。
 - **`godotenv`**: Go 应用程序用于加载 `.env` 文件的库，通过 `go mod` 自动管理。
 
@@ -29,28 +29,19 @@ Go2NetSpectra 采用 **`configs/config.yaml`** 作为唯一的配置文件。为
 
 ---
 
-## 2. 生成 Protobuf 代码
+## 2. 生成 Thrift 代码
 
-项目使用 Protobuf 来定义跨服务传输的数据结构。在初次克隆项目或修改了 `api/proto/v1/` 目录下的 `.proto` 文件后，您需要重新生成 Go 代码。
+项目使用 Thrift 来定义跨服务传输的数据结构。在初次克隆项目或修改了 `api/thrift/v1/` 目录下的 `.thrift` 文件后，您需要重新生成 Go 代码。
 
-**第一步：安装 Go 插件**
-
-如果您尚未安装 `protoc` 的 Go 语言插件，请运行以下命令：
+在项目根目录下，执行以下命令来生成所有受支持的 `.thrift` 文件：
 ```sh
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
+thrift --gen go -out api/gen/thrift api/thrift/v1/traffic.thrift
+thrift --gen go -out api/gen/thrift api/thrift/v1/query.thrift
+thrift --gen go -out api/gen/thrift api/thrift/v1/ai.thrift
+rm -rf api/gen/thrift/v1/*-remote
 ```
 
-**第二步：生成代码**
-
-在项目根目录下，执行以下命令来生成所有 `.proto` 文件：
-```sh
-protoc --proto_path=api/proto \
-       --go_out=. --go-grpc_out=. \
-       api/proto/v1/*.proto
-```
-
-命令成功后，会在 `api/gen/v1/` 目录下生成或更新对应的 `.pb.go` 和 `_grpc.pb.go` 文件。
+命令成功后，会在 `api/gen/thrift/v1/` 目录下生成或更新对应的 Go 文件。`api/proto/v1/` 和 `api/gen/v1/` 只保留为 legacy 历史资产，不再是受支持的生成源。
 
 ---
 
@@ -79,7 +70,7 @@ docker run -d -p 18123:8123 -p 19000:9000 -e CLICKHOUSE_PASSWORD=${CLICKHOUSE_PA
 # 终端 3: 启动引擎
 go run ./cmd/ns-engine/main.go
 
-# 终端 4: 启动 API 服务 (v2 gRPC Server)
+# 终端 4: 启动 API 服务 (Thrift RPC + Grafana HTTP)
 go run ./cmd/ns-api/v2/main.go
 
 # 终端 5: 启动 AI 服务
@@ -138,7 +129,7 @@ docker compose up --build
     go run ./cmd/ns-probe/main.go --mode=sub
     ```
 
-*   **使用查询脚本**: 在另一个新终端中，使用 **v2 脚本** 与 `ns-api` 的 gRPC 服务交互。确保您的本地 `.env` (或环境变量) 中 `API_GRPC_LISTEN_ADDR` 配置为 `localhost:50051`。
+*   **使用查询脚本**: 在另一个新终端中，使用 **v2 脚本** 与 `ns-api` 的 Thrift RPC 服务交互。确保您的本地 `.env` (或环境变量) 中 `API_RPC_LISTEN_ADDR` 配置为 `localhost:50051`。
     ```sh
     # 查询聚合流
     go run ./scripts/query/v2/main.go --mode=aggregate --task=per_src_ip
@@ -180,7 +171,7 @@ go test -run '^$' -bench '^BenchmarkMurmurHash3RepresentativeFlowInputs$' -bench
 
 ### 5.1. 查询脚本
 
-项目在 `scripts/query/v2/` 目录下提供了一个多功能 gRPC 查询工具，支持多种模式和参数。详情请运行 `go run ./scripts/query/v2/main.go --help`。
+项目在 `scripts/query/v2/` 目录下提供了一个多功能 Thrift RPC 查询工具，支持多种模式和参数。详情请运行 `go run ./scripts/query/v2/main.go --help`。
 
 ### 5.2. Gob 解码器
 

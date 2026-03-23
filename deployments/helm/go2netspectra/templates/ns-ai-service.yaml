@@ -9,12 +9,12 @@ metadata:
 spec:
   type: {{ .Values.nsAi.service.type }}
   ports:
-    - port: {{ .Values.nsAi.service.grpc.port }}
-      targetPort: grpc
+    - port: {{ .Values.nsAi.service.rpc.port }}
+      targetPort: rpc
       protocol: TCP
-      name: grpc
-      {{- if and (eq .Values.nsAi.service.type "NodePort") .Values.nsAi.service.grpc.nodePort }}
-      nodePort: {{ .Values.nsAi.service.grpc.nodePort }}
+      name: rpc
+      {{- if and (eq .Values.nsAi.service.type "NodePort") .Values.nsAi.service.rpc.nodePort }}
+      nodePort: {{ .Values.nsAi.service.rpc.nodePort }}
       {{- end }}
   selector:
     {{- include "go2netspectra.selectorLabels" . | nindent 4 }}

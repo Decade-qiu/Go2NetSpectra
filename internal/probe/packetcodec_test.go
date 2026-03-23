@@ -1,7 +1,9 @@
 package probe
 
 import (
+	thriftv1 "Go2NetSpectra/api/gen/thrift/v1"
 	"Go2NetSpectra/internal/model"
+	"encoding/hex"
 	"net"
 	"testing"
 	"time"
@@ -21,14 +23,14 @@ func TestPacketInfoRoundTrip(t *testing.T) {
 		},
 	}
 
-	pbPacket, err := PacketInfoToProto(original)
+	thriftPacket, err := packetInfoToThrift(original)
 	if err != nil {
-		t.Fatalf("PacketInfoToProto() unexpected error: %v", err)
+		t.Fatalf("packetInfoToThrift() unexpected error: %v", err)
 	}
 
-	decoded, err := PacketInfoFromProto(pbPacket)
+	decoded, err := packetInfoFromThrift(thriftPacket)
 	if err != nil {
-		t.Fatalf("PacketInfoFromProto() unexpected error: %v", err)
+		t.Fatalf("packetInfoFromThrift() unexpected error: %v", err)
 	}
 
 	if !decoded.Timestamp.Equal(original.Timestamp) {
@@ -54,9 +56,9 @@ func TestPacketInfoRoundTrip(t *testing.T) {
 	}
 }
 
-func TestPacketInfoToProtoRejectsNil(t *testing.T) {
-	if _, err := PacketInfoToProto(nil); err == nil {
-		t.Fatal("PacketInfoToProto(nil) error = nil, want non-nil")
+func TestPacketInfoToThriftRejectsNil(t *testing.T) {
+	if _, err := packetInfoToThrift(nil); err == nil {
+		t.Fatal("packetInfoToThrift(nil) error = nil, want non-nil")
 	}
 }
 
@@ -106,8 +108,23 @@ func TestMarshalPacketInfoRoundTrip(t *testing.T) {
 	}
 }
 
-func TestPacketInfoFromProtoRejectsMissingFiveTuple(t *testing.T) {
-	if _, err := PacketInfoFromProto(nil); err == nil {
-		t.Fatal("PacketInfoFromProto(nil) error = nil, want non-nil")
+func TestPacketInfoFromThriftRejectsMissingFiveTuple(t *testing.T) {
+	if _, err := packetInfoFromThrift(nil); err == nil {
+		t.Fatal("packetInfoFromThrift(nil) error = nil, want non-nil")
+	}
+
+	if _, err := packetInfoFromThrift(&thriftv1.PacketInfo{}); err == nil {
+		t.Fatal("packetInfoFromThrift(empty thrift packet) error = nil, want non-nil")
+	}
+}
+
+func TestUnmarshalPacketInfoRejectsLegacyProtobufPayload(t *testing.T) {
+	legacyPayload, err := hex.DecodeString("0a060880e2cfaa0612140a04c000020a1204c633641418bb0320fb412806188001")
+	if err != nil {
+		t.Fatalf("hex.DecodeString() unexpected error: %v", err)
+	}
+
+	if _, err := UnmarshalPacketInfo(legacyPayload); err == nil {
+		t.Fatal("UnmarshalPacketInfo(legacy protobuf payload) error = nil, want non-nil")
 	}
 }

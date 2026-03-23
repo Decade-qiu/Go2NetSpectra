@@ -4,27 +4,91 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
 
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// AggregationRequest defines the supported aggregate query filters.
+type AggregationRequest struct {
+	EndTime  *time.Time
+	TaskName string
+	SrcIP    string
+	DstIP    string
+	SrcPort  *int32
+	DstPort  *int32
+	Protocol *int32
+}
+
+// TaskSummary represents an aggregate summary row for a task.
+type TaskSummary struct {
+	TaskName     string
+	TotalBytes   int64
+	TotalPackets int64
+	FlowCount    int64
+}
+
+// QueryTotalCountsResponse contains aggregate summaries.
+type QueryTotalCountsResponse struct {
+	Summaries []TaskSummary
+}
+
+// TraceFlowRequest defines the supported flow-trace filters.
+type TraceFlowRequest struct {
+	TaskName string
+	FlowKeys map[string]string
+	EndTime  *time.Time
+}
+
+// FlowLifecycle describes the observed lifecycle of a flow.
+type FlowLifecycle struct {
+	FirstSeen    time.Time
+	LastSeen     time.Time
+	TotalPackets int64
+	TotalBytes   int64
+}
+
+// HeavyHittersRequest defines the supported heavy-hitter query filters.
+type HeavyHittersRequest struct {
+	TaskName string
+	Type     int32
+	EndTime  *time.Time
+	Limit    int32
+}
+
+// HeavyHitter represents a single heavy-hitter result row.
+type HeavyHitter struct {
+	Flow  string
+	Value int64
+}
+
+// HeavyHittersResponse contains heavy-hitter query results.
+type HeavyHittersResponse struct {
+	Hitters []HeavyHitter
+}
 
 // Querier defines the interface for querying flow data.
 type Querier interface {
-	AggregateFlows(ctx context.Context, req *v1.AggregationRequest) (*v1.QueryTotalCountsResponse, error)
-	TraceFlow(ctx context.Context, req *v1.TraceFlowRequest) (*v1.FlowLifecycle, error)
-	QueryHeavyHitters(ctx context.Context, req *v1.HeavyHittersRequest) (*v1.HeavyHittersResponse, error)
+	AggregateFlows(ctx context.Context, req *AggregationRequest) (*QueryTotalCountsResponse, error)
+	TraceFlow(ctx context.Context, req *TraceFlowRequest) (*FlowLifecycle, error)
+	QueryHeavyHitters(ctx context.Context, req *HeavyHittersRequest) (*HeavyHittersResponse, error)
 }
 
 // clickhouseQuerier implements the Querier interface for ClickHouse.
 type clickhouseQuerier struct {
 	conn clickhouse.Conn
+}
+
+func uint64ToInt64(value uint64, field string) (int64, error) {
+	if value > math.MaxInt64 {
+		return 0, fmt.Errorf("%s exceeds int64 range: %d", field, value)
+	}
+	return int64(value), nil
 }
 
 var traceFlowKeys = map[string]struct{}{
@@ -62,7 +126,6 @@ func connect(cfg config.ClickHouseConfig) (clickhouse.Conn, error) {
 		}
 	}
 	conn, err := clickhouse.Open(opts)
-
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +138,35 @@ func connect(cfg config.ClickHouseConfig) (clickhouse.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+func appendAggregationFilters(whereClauses []string, args []any, req *AggregationRequest) ([]string, []any) {
+	if req.TaskName != "" {
+		whereClauses = append(whereClauses, "TaskName = ?")
+		args = append(args, req.TaskName)
+	}
+	if req.SrcIP != "" {
+		whereClauses = append(whereClauses, "SrcIP = ?")
+		args = append(args, req.SrcIP)
+	}
+	if req.DstIP != "" {
+		whereClauses = append(whereClauses, "DstIP = ?")
+		args = append(args, req.DstIP)
+	}
+	if req.SrcPort != nil {
+		whereClauses = append(whereClauses, "SrcPort = ?")
+		args = append(args, *req.SrcPort)
+	}
+	if req.DstPort != nil {
+		whereClauses = append(whereClauses, "DstPort = ?")
+		args = append(args, *req.DstPort)
+	}
+	if req.Protocol != nil {
+		whereClauses = append(whereClauses, "Protocol = ?")
+		args = append(args, *req.Protocol)
+	}
+
+	return whereClauses, args
 }
 
 func appendTraceFlowFilters(whereClauses []string, args []any, flowKeys map[string]string) ([]string, []any, error) {
@@ -96,7 +188,7 @@ func appendTraceFlowFilters(whereClauses []string, args []any, flowKeys map[stri
 }
 
 // QueryHeavyHitters builds and executes a dynamic heavy hitters query.
-func (q *clickhouseQuerier) QueryHeavyHitters(ctx context.Context, req *v1.HeavyHittersRequest) (*v1.HeavyHittersResponse, error) {
+func (q *clickhouseQuerier) QueryHeavyHitters(ctx context.Context, req *HeavyHittersRequest) (*HeavyHittersResponse, error) {
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString(`
 		SELECT Flow, LatestValue
@@ -118,11 +210,10 @@ func (q *clickhouseQuerier) QueryHeavyHitters(ctx context.Context, req *v1.Heavy
 
 	if req.EndTime != nil {
 		whereClauses = append(whereClauses, "Timestamp <= ?")
-		args = append(args, req.EndTime.AsTime())
+		args = append(args, *req.EndTime)
 	}
 
 	queryBuilder.WriteString(" WHERE " + strings.Join(whereClauses, " AND "))
-
 	queryBuilder.WriteString(`
 			GROUP BY Flow
 		)
@@ -137,20 +228,27 @@ func (q *clickhouseQuerier) QueryHeavyHitters(ctx context.Context, req *v1.Heavy
 	}
 	defer rows.Close()
 
-	var hitters []*v1.HeavyHitter
+	var hitters []HeavyHitter
 	for rows.Next() {
-		var hitter v1.HeavyHitter
-		if err := rows.Scan(&hitter.Flow, &hitter.Value); err != nil {
+		var (
+			hitter HeavyHitter
+			value  uint64
+		)
+		if err := rows.Scan(&hitter.Flow, &value); err != nil {
 			return nil, fmt.Errorf("failed to scan heavy hitter row: %w", err)
 		}
-		hitters = append(hitters, &hitter)
+		hitter.Value, err = uint64ToInt64(value, "heavy_hitter.value")
+		if err != nil {
+			return nil, err
+		}
+		hitters = append(hitters, hitter)
 	}
 
-	return &v1.HeavyHittersResponse{Hitters: hitters}, nil
+	return &HeavyHittersResponse{Hitters: hitters}, nil
 }
 
 // AggregateFlows builds and executes a dynamic aggregation query.
-func (q *clickhouseQuerier) AggregateFlows(ctx context.Context, req *v1.AggregationRequest) (*v1.QueryTotalCountsResponse, error) {
+func (q *clickhouseQuerier) AggregateFlows(ctx context.Context, req *AggregationRequest) (*QueryTotalCountsResponse, error) {
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString(`
 		SELECT
@@ -166,16 +264,13 @@ func (q *clickhouseQuerier) AggregateFlows(ctx context.Context, req *v1.Aggregat
 			FROM flow_metrics
 	`)
 
-	whereClauses := make([]string, 0, 2)
-	args := make([]any, 0, 2)
+	whereClauses := make([]string, 0, 7)
+	args := make([]any, 0, 7)
 
+	whereClauses, args = appendAggregationFilters(whereClauses, args, req)
 	if req.EndTime != nil {
 		whereClauses = append(whereClauses, "Timestamp <= ?")
-		args = append(args, req.EndTime.AsTime())
-	}
-	if req.TaskName != "" {
-		whereClauses = append(whereClauses, "TaskName = ?")
-		args = append(args, req.TaskName)
+		args = append(args, *req.EndTime)
 	}
 
 	if len(whereClauses) > 0 {
@@ -194,20 +289,37 @@ func (q *clickhouseQuerier) AggregateFlows(ctx context.Context, req *v1.Aggregat
 	}
 	defer rows.Close()
 
-	var summaries []*v1.TaskSummary
+	var summaries []TaskSummary
 	for rows.Next() {
-		var summary v1.TaskSummary
-		if err := rows.Scan(&summary.TaskName, &summary.TotalBytes, &summary.TotalPackets, &summary.FlowCount); err != nil {
+		var (
+			summary      TaskSummary
+			totalBytes   uint64
+			totalPackets uint64
+			flowCount    uint64
+		)
+		if err := rows.Scan(&summary.TaskName, &totalBytes, &totalPackets, &flowCount); err != nil {
 			return nil, fmt.Errorf("failed to scan aggregation result: %w", err)
 		}
-		summaries = append(summaries, &summary)
+		summary.TotalBytes, err = uint64ToInt64(totalBytes, "aggregation.total_bytes")
+		if err != nil {
+			return nil, err
+		}
+		summary.TotalPackets, err = uint64ToInt64(totalPackets, "aggregation.total_packets")
+		if err != nil {
+			return nil, err
+		}
+		summary.FlowCount, err = uint64ToInt64(flowCount, "aggregation.flow_count")
+		if err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, summary)
 	}
 
-	return &v1.QueryTotalCountsResponse{Summaries: summaries}, nil
+	return &QueryTotalCountsResponse{Summaries: summaries}, nil
 }
 
 // TraceFlow executes a query to trace the lifecycle of a single flow.
-func (q *clickhouseQuerier) TraceFlow(ctx context.Context, req *v1.TraceFlowRequest) (*v1.FlowLifecycle, error) {
+func (q *clickhouseQuerier) TraceFlow(ctx context.Context, req *TraceFlowRequest) (*FlowLifecycle, error) {
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString(`
 		SELECT
@@ -231,23 +343,30 @@ func (q *clickhouseQuerier) TraceFlow(ctx context.Context, req *v1.TraceFlowRequ
 
 	if req.EndTime != nil {
 		whereClauses = append(whereClauses, "Timestamp <= ?")
-		args = append(args, req.EndTime.AsTime())
+		args = append(args, *req.EndTime)
 	}
 
 	if len(whereClauses) > 0 {
 		queryBuilder.WriteString(" WHERE " + strings.Join(whereClauses, " AND "))
 	}
 
-	var result v1.FlowLifecycle
-	var firstSeen, lastSeen time.Time
-
+	var (
+		result       FlowLifecycle
+		totalPackets uint64
+		totalBytes   uint64
+	)
 	row := q.conn.QueryRow(ctx, queryBuilder.String(), args...)
-	if err := row.Scan(&firstSeen, &lastSeen, &result.TotalPackets, &result.TotalBytes); err != nil {
+	if err := row.Scan(&result.FirstSeen, &result.LastSeen, &totalPackets, &totalBytes); err != nil {
 		return nil, fmt.Errorf("failed to scan flow lifecycle result: %w", err)
 	}
-
-	result.FirstSeen = timestamppb.New(firstSeen)
-	result.LastSeen = timestamppb.New(lastSeen)
+	result.TotalPackets, err = uint64ToInt64(totalPackets, "trace.total_packets")
+	if err != nil {
+		return nil, err
+	}
+	result.TotalBytes, err = uint64ToInt64(totalBytes, "trace.total_bytes")
+	if err != nil {
+		return nil, err
+	}
 
 	return &result, nil
 }

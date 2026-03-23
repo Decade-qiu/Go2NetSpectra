@@ -28,7 +28,7 @@ spec:
           imagePullPolicy: {{ .Values.nsApi.image.pullPolicy }}
           ports:
             - containerPort: 50051
-              name: grpc
+              name: rpc
             - containerPort: 8080
               name: http
           volumeMounts:

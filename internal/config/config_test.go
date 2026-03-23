@@ -14,7 +14,7 @@ func TestLoadConfigExpandsEnvironmentVariables(t *testing.T) {
 	content := []byte(`
 ai:
   api_key: ${GO2NETSPECTRA_TEST_API_KEY}
-  grpc_listen_addr: ":50052"
+  rpc_listen_addr: ":50052"
 `)
 	if err := os.WriteFile(configPath, content, 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error: %v", configPath, err)
@@ -28,8 +28,8 @@ ai:
 	if cfg.AI.APIKey != "super-secret" {
 		t.Fatalf("LoadConfig(%q) APIKey = %q, want %q", configPath, cfg.AI.APIKey, "super-secret")
 	}
-	if cfg.AI.GRPCListenAddr != ":50052" {
-		t.Fatalf("LoadConfig(%q) GRPCListenAddr = %q, want %q", configPath, cfg.AI.GRPCListenAddr, ":50052")
+	if cfg.AI.RPCListenAddr != ":50052" {
+		t.Fatalf("LoadConfig(%q) RPCListenAddr = %q, want %q", configPath, cfg.AI.RPCListenAddr, ":50052")
 	}
 }
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -53,14 +54,14 @@ type ExactAggregatorConfig struct {
 
 // SketchTaskDef defines a single task's parameters within the sketch aggregator group.
 type SketchTaskDef struct {
-	Name            string   `yaml:"name"`
-	SktType         uint8    `yaml:"skt_type"` // 0 for CountMin, 1 for SuperSpread
-	FlowFields      []string `yaml:"flow_fields"`
-	ElementFields   []string `yaml:"element_fields"`
-	Width           uint32   `yaml:"width"`
-	Depth           uint32   `yaml:"depth"`
-	SizeThereshold  uint32   `yaml:"size_thereshold"`
-	CountThereshold uint32   `yaml:"count_thereshold"`
+	Name           string   `yaml:"name"`
+	SketchType     uint8    `yaml:"skt_type"` // 0 for CountMin, 1 for SuperSpread
+	FlowFields     []string `yaml:"flow_fields"`
+	ElementFields  []string `yaml:"element_fields"`
+	Width          uint32   `yaml:"width"`
+	Depth          uint32   `yaml:"depth"`
+	SizeThreshold  uint32   `yaml:"size_thereshold"`
+	CountThreshold uint32   `yaml:"count_thereshold"`
 	// SuperSpread specific parameters
 	M    uint32  `yaml:"m"`
 	Size uint32  `yaml:"size"`
@@ -68,7 +69,7 @@ type SketchTaskDef struct {
 	B    float64 `yaml:"b"`
 }
 
-// SketchTaskDef defines a single task's parameters within the sketch aggregator group.
+// SketchAggregatorConfig holds all configuration for the sketch aggregator type.
 type SketchAggregatorConfig struct {
 	Writers []WriterDef     `yaml:"writers"`
 	Tasks   []SketchTaskDef `yaml:"tasks"`
@@ -102,8 +103,8 @@ type ProbeConfig struct {
 
 // APIConfig holds the configuration for the API server.
 type APIConfig struct {
-	GrpcListenAddr string `yaml:"grpc_listen_addr"`
-	HttpListenAddr string `yaml:"http_listen_addr"`
+	RPCListenAddr  string `yaml:"rpc_listen_addr"`
+	HTTPListenAddr string `yaml:"http_listen_addr"`
 }
 
 // AlerterRule defines a single condition for triggering an alert.
@@ -141,11 +142,11 @@ type SMTPConfig struct {
 
 // AIConfig defines the configuration for the AI analyzer service.
 type AIConfig struct {
-	Provider       string `yaml:"provider"`
-	APIKey         string `yaml:"api_key"`
-	Model          string `yaml:"model"`
-	BaseURL        string `yaml:"base_url"`
-	GRPCListenAddr string `yaml:"grpc_listen_addr"`
+	Provider      string `yaml:"provider"`
+	APIKey        string `yaml:"api_key"`
+	Model         string `yaml:"model"`
+	BaseURL       string `yaml:"base_url"`
+	RPCListenAddr string `yaml:"rpc_listen_addr"`
 }
 
 // Config is the top-level configuration for the application.
@@ -161,8 +162,11 @@ type Config struct {
 // LoadConfig reads the configuration from a YAML file, expands environment variables, and returns a Config struct.
 func LoadConfig(filePath string) (*Config, error) {
 	// Load .env file if it exists. This is primarily for local development.
-	// Errors are ignored as .env might not exist in production environments.
-	_ = godotenv.Load()
+	// Missing files are acceptable because production deployments may inject
+	// configuration through the environment instead.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load .env: %w", err)
+	}
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
