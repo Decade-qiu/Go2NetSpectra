@@ -92,6 +92,8 @@
 ## Active Technologies
 - Go 1.25.0 + gopacket, Protobuf/gRPC, NATS, ClickHouse, YAML (001-repo-go-refactor)
 - ClickHouse, optional gob/text/pcap outputs, YAML configuration, (001-repo-go-refactor)
+- Go 1.25.0 + gopacket, Apache Thrift compiler and Go library, (002-thrift-rpc-migration)
+- ClickHouse, optional gob/text/pcap outputs, NATS as packe (002-thrift-rpc-migration)
 
 ## Recent Changes
 - 001-repo-go-refactor: Added Go 1.25.0 + gopacket, Protobuf/gRPC, NATS, ClickHouse, YAML

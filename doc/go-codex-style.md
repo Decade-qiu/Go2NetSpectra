@@ -1,426 +1,218 @@
-# Go Codex 编码规范
-
-本文档是为 Codex 和本仓库开发者整理的 Go 编码规范汇编，目标是把仓库内高频会遇到的 Go 风格、API 设计、错误处理、并发、测试与模块版本规则收敛到一份可执行手册中。
-
-## 文档目标
-
-- 作为根目录 `AGENTS.md` 的详细补充，便于 Codex 和开发者查阅。
-- 尽量覆盖 Go 官方与准官方文档中最稳定、最可执行的规则。
-- 在官方规则之外，只补充少量适合本仓库长期维护的执行建议。
-
-## 规则级别
-
-- `MUST`：默认必须遵守，除非有明确且记录在案的例外。
-- `SHOULD`：强烈建议遵守；如不遵守，应能说明理由。
-- `AVOID`：默认避免；只有在收益明显高于维护成本时才使用。
-
-## 1. 总体设计原则
-
-- `MUST`：优先保证代码清晰度。读者必须能快速看懂代码在做什么，以及为什么这样做。
-- `MUST`：优先选择最简单、最标准、最容易维护的实现方式。
-- `SHOULD`：复杂性只在性能、兼容性、并发模型或 API 约束确实需要时引入。
-- `SHOULD`：如果代码因为性能或协议原因变复杂，需要配套注释、文档或测试说明关键约束。
-- `SHOULD`：优先保持 package 内、目录内和相邻文件中的局部一致性；但不要继续扩散已经偏离规范的旧写法。
-
-## 2. 格式化与版式
-
-- `MUST`：所有 Go 源文件都符合 `gofmt` 输出。
-- `SHOULD`：有 import 变化时使用 `goimports`，避免手排 import。
-- `MUST`：Go 文件名默认使用全小写；多词文件名使用 snake_case，如 `count_min.go`、`querier_test.go`。
-- `MUST`：不要为了“视觉对齐”手工调整空格，让 `gofmt` 决定布局。
-- `MUST`：Go 没有固定行宽限制，不要为了凑 80 列或 100 列做生硬换行。
-- `SHOULD`：如果某一行过长，优先缩短命名、提取变量或重构表达式，而不是机械折行。
-- `SHOULD`：长字符串、URL、格式串等如果拆开会损害语义，允许保留长行。
-- `SHOULD`：换行应服务于语义分组，而不是机械满足长度。
-
-## 3. import 规范
-
-- `MUST`：两个及以上 import 使用 `import (...)` 聚合。
-- `MUST`：import 按分组组织，并使用空行分隔。
-- `MUST`：标准库始终放在第一组。
-- `SHOULD`：分组内按照字典序排序。
-- `SHOULD`：常见分组顺序如下：
-  - 标准库
-  - 第三方依赖
-  - 本项目或同模块的内部依赖
-- `MUST`：避免不必要的 import 别名。
-- `SHOULD`：仅在以下情况使用 import 别名：
-  - 解决命名冲突
-  - import path 末尾元素与实际包名不一致
-  - 生成代码或历史包名在当前上下文中可读性较差
-- `MUST`：blank import 只用于“仅需副作用”的场景。
-- `SHOULD`：blank import 主要出现在 `main` 包或特定测试中。
-- `AVOID`：在业务代码中使用 dot import。
-- `SHOULD`：dot import 仅在测试代码因循环依赖无法放回被测包时使用。
-
-## 4. 命名规范
-
-### 4.1 package
-
-- `MUST`：包名只用小写字母，不用大写、下划线和混合大小写。
-- `MUST`：包名应简短、明确，并能作为路径最后一级名称。
-- `SHOULD`：包名优先使用单数形式。
-- `SHOULD`：包名应体现职责边界，如 `time`、`http`、`encoding/base64`。
-- `AVOID`：`util`、`common`、`misc`、`api`、`types`、`interfaces`、`helper`、`model`、`testhelper` 这类无边界名称。
-- `AVOID`：与标准库常用包同名，除非语义完全一致且不会一起被导入。
-- `SHOULD`：不要抢占调用方常用变量名，例如 `bufio` 优于 `buf`。
-- `SHOULD`：缩写要克制，只有当缩写在上下文里清晰可读时才使用，如 `fmt`、`strconv`。
-
-### 4.2 标识符通用规则
-
-- `MUST`：导出标识符使用 `MixedCaps`，未导出标识符使用 `mixedCaps`。
-- `MUST`：不要使用 snake_case。
-- `SHOULD`：命名要短，但不能牺牲可读性。
-- `SHOULD`：名称离使用点越远，携带的上下文信息应越多。
-- `SHOULD`：局部变量可以更短，全局变量、导出变量和跨函数共享变量应更明确。
-
-### 4.3 缩写与首字母缩略词
-
-- `MUST`：常见缩写保持统一大小写，如 `ID`、`URL`、`HTTP`、`JSON`、`API`、`DB`。
-- `MUST`：`ServeHTTP` 而不是 `ServeHttp`，`appID` 而不是 `appId`。
-- `SHOULD`：多个缩略词组合时，各缩略词内部大小写保持一致，如 `XMLAPI`、`xmlAPI`。
-- `SHOULD`：像 `gRPC`、`iOS`、`DDoS` 这类在英文里自带大小写的词，按官方文档给出的习惯处理导出与未导出形式。
-
-### 4.4 function / method
+# Go 代码规范 规则清单
 
-- `MUST`：函数名不要重复包名语义。
-- `SHOULD`：如果 `pkg.F()` 返回 `pkg.T`，通常可以省略类型信息，如 `time.Now()`、`time.Parse()`。
-- `SHOULD`：如果返回类型不是包名对应主类型，可在函数名里补充类型信息，如 `time.ParseDuration()`。
-- `SHOULD`：如果某类型是包的主要入口，构造函数可以命名为 `New()`。
-- `MUST`：getter 不加 `Get` 前缀，除非概念本身就是 GET / Fetch / Compute 等动作。
-- `SHOULD`：如果函数会执行远程调用、复杂计算或阻塞操作，使用 `Fetch`、`Compute`、`Load` 等更明确的动词。
+## 1. Formatting
 
-### 4.5 receiver
-
-- `MUST`：receiver 名称短，通常 1 到 2 个字母。
-- `MUST`：receiver 名称是类型名的缩写，并在该类型全部方法中保持一致。
-- `MUST`：不要使用 `self`、`this`、`me`。
-- `SHOULD`：如果 receiver 未使用，直接省略名称，不要用 `_`。
-
-### 4.6 receiver type
-
-- `MUST`：方法需要修改 receiver 时，使用指针 receiver。
-- `MUST`：receiver 包含 `sync.Mutex` 等不可复制同步字段时，使用指针 receiver。
-- `SHOULD`：大 struct / array 优先使用指针 receiver。
-- `SHOULD`：若 receiver 是 map、func、chan，不要再对它们取指针。
-- `SHOULD`：对 slice，如果方法不重切片也不重分配，优先不用指针 receiver。
-- `SHOULD`：小型、天然值语义、无锁且无共享内部可变状态的类型可使用 value receiver。
-- `AVOID`：同一类型混用 value receiver 和 pointer receiver。
+- [MUST] 统一依赖 `gofmt` 和 `goimports`；`import` 至少要区分“标准库”和“其他包”两组，也可以细分为依赖包、项目包、Outer/Inner 包等 3 组或 4 组，但同一项目必须长期保持一种一致的分组方式。
+- [SHOULD] 只有在换行能提升可读性时才换行，不要只因为行长看起来过长就机械断行；原文没有硬性行长上限。
 
-### 4.7 interface
+## 2. Commentary
 
-- `SHOULD`：单方法接口通常用 `-er` 命名，如 `Reader`、`Writer`。
-- `MUST`：不要占用 Go 里已有强语义的方法名，除非行为完全一致，如 `Read`、`Write`、`String`、`ServeHTTP`。
-- `MUST`：接口优先由消费者定义，而不是由实现方预先声明。
-- `MUST`：不要仅仅为了 mock 而在实现侧导出接口。
-- `SHOULD`：接口要小而精，越大越弱。
-- `SHOULD`：默认遵循“accept interfaces, return concrete types”。
-- `SHOULD`：只有在以下场景才优先返回接口：
-  - 接口本身就是产品或协议边界
-  - 需要隐藏危险实现细节以维护不变量
-  - 运行期需要返回多个不同具体实现
+- [SHOULD] 大多数情况下使用行注释 `//`，包括 package comment；只有在表达式内部这类局部场景才使用块注释 `/* */`。
+- [SHOULD] 注释优先使用英文，以保证跨团队协作和代码审查的一致可读性。
 
-### 4.8 variable / constant / error names
+### 2.1 Package Comment
 
-- `SHOULD`：局部变量优先短名，如 `i`、`r`、`buf`、`ctx`。
-- `SHOULD`：跨作用域、跨函数、跨 goroutine 使用的变量名应更明确。
-- `MUST`：常量使用 `MixedCaps`，不要用 `MAX_X`、`kMaxX`。
-- `SHOULD`：常量命名表达“角色”而不是“值”，如 `MaxPacketSize` 优于 `Twelve`。
-- `MUST`：可复用错误变量命名为 `errXxx` 或 `ErrXxx`。
+- [RECOMMENDED] 在包顶部写简短包注释，直接说明包的职责、边界和用途，而不是重复包名。
+- [OPTIONAL] 当包的初始化方式、调用方式或用途不够直观时，可以在包注释里附一个最小示例。
 
-### 4.9 file names
+### 2.2 Function Comment
 
-- `MUST`：Go 文件名默认使用全小写。
-- `SHOULD`：多词文件名使用 snake_case，而不是 `MixedCaps` 或连字符。
-- `SHOULD`：测试文件命名与被测文件保持可追踪关系，如 `querier.go` 对应 `querier_test.go`。
+- [MUST] 导出函数必须写用法注释，除非函数名本身已经完全自解释；注释应至少帮助调用方理解前置条件、输入、输出、性能影响和错误处理方式。
+- [RECOMMENDED] 函数注释以函数名开头，便于文档工具生成和读者快速定位。
+- [MAY NOT] 只有当函数名和行为都非常直白、没有额外前提或坑点时，自解释的函数可以不写注释。
 
-## 5. 注释与文档
+### 2.3 Function Argument Comment
 
-### 5.1 总体要求
+- [RECOMMENDED] 当函数参数含义不直观时，可用 `/*argument=*/` 添加参数注释；但更优先通过具名常量、配置结构体或中间变量让调用点自己变得清楚。
 
-- `SHOULD`：Go 代码注释默认使用英文，尤其是 package comment、导出符号注释和错误文案。
-- `MUST`：所有导出顶层符号都必须有 doc comment。
-- `SHOULD`：非平凡的未导出类型、函数或关键内部接口也写注释。
-- `SHOULD`：注释优先解释“为什么”，而不是简单复述代码“做什么”。
-- `SHOULD`：复杂 API 尽量提供 runnable example，示例应放测试文件中。
+### 2.4 Implementation Comment
 
-### 5.2 package comment
+- [SHOULD] 实现注释只解释棘手、不明显、重要或有陷阱的部分，帮助维护者理解“为什么这样写”。
+- [SHALL NOT] 不要写“把代码翻译成自然语言”的显然注释，避免制造噪音。
 
-- `MUST`：每个 package 都有包注释。
-- `MUST`：同一个 package comment 只保留一份，避免多文件重复描述。
-- `MUST`：包注释紧挨 `package` 声明，中间不留空行。
-- `MUST`：普通包注释以 `Package <name>` 开头。
-- `SHOULD`：`package main` 注释可以使用 `Command <name>`、`Binary <name>`、`Program <name>` 或类似写法。
-- `SHOULD`：较长包文档放在 `doc.go`，较短可放在与包同名文件顶部。
+### 2.5 Variable Comment
 
-### 5.3 doc comment
+- [SHOULD] 如果变量名在当前上下文中不够自解释，就为变量声明补充注释，说明它的业务语义、约束或特殊含义。
 
-- `MUST`：导出符号注释以符号名开头。
-- `MUST`：文档注释使用完整英文句子，首字母大写，句号结尾。
-- `SHOULD`：即使当前符号未导出，如果它未来可能导出，也可提前按 doc comment 规范书写。
-- `SHOULD`：写完文档后，用 doc preview / godoc 视角检查是否顺畅易读。
+### 2.6 TODO Comment
 
-### 5.4 行内注释与代码段注释
+- [SHOULD] 每个 TODO 都写明负责人，否则 TODO 很容易长期悬空并被遗忘。
+- [RECOMMENDED] TODO 更推荐指向 JIRA ticket，而不是直接指向个人，因为 ticket 更易转派、追踪和审计。
 
-- `MUST`：完整句子的独立注释首字母大写，并以句号结尾。
-- `SHOULD`：行尾短注释可使用短语，不必强行大写和加句号。
-- `SHOULD`：注释换行以可读性为准，不必机械卡列宽。
-- `AVOID`：过度装饰性的 Markdown 语法；Godoc 对普通缩进更友好。
+## 3. Names
 
-## 6. 控制流与基本写法
+- [MUST] 大多数命名使用 `CamelCase/camelCase`，并尽量避免下划线；项目内命名风格必须统一。
+- [SHOULD] 命名尽量短且准确，既不要冗长堆砌上下文，也不要为了短而牺牲含义。
+- [SHOULD] 缩写要克制，只在读者普遍熟悉且不会引起歧义时使用，避免自造缩写或生僻词。
 
-### 6.1 if / else
+### 3.1 Package
 
-- `MUST`：如果 `if` 与 `else` 分支都以 `return` 结束，省略冗余 `else`。
-- `SHOULD`：如果两个分支只给同一变量赋值，先设置默认值，再在 `if` 中覆盖。
-- `SHOULD`：正常路径保持最小缩进，错误路径优先返回。
+- [MUST] 同一项目内的包名必须唯一；如果两个包都想用同名，通常说明命名过泛或职责边界重叠，需要重审设计。
+- [MUST] 包名必须全小写，不能包含大写字母或下划线。
+- [MUST] 包名必须用单数形式，例如用 `httputil`，不要用 `httputils`。
+- [SHOULD] 包名应简短但能代表职责，命名时描述“这个包提供什么”，而不是“这个包包含什么”；尽量避免顶层包名用 `common`、`util` 这种过宽名称。
 
-### 6.2 Indent Error Flow
+### 3.2 Function
 
-- `MUST`：优先使用 guard clause 处理错误。
-- `SHOULD`：遇到 `if x, err := f(); err != nil { ... } else { ... }` 且 `else` 让主路径右移时，考虑拆成两行提升可读性。
+- [MUST] 函数名必须使用 `MixedCaps` 或 `mixedCaps`；导出函数用 `MixedCaps`，非导出函数用 `mixedCaps`，测试函数为了分组可以例外地包含下划线。
+- [SHOULD NOT] 函数名不要重复表达包名或包内容，因为调用点本来就会带上包名前缀。
+- [RECOMMENDED] 函数名优先用动词或动词短语，让读者一眼知道它在做什么动作。
 
-### 6.3 for range 与 blank identifier
+### 3.3 Variable
 
-- `MUST`：只用索引时写 `for i := range s`，不要写 `for i, _ := range s`。
-- `MUST`：索引和值都不用时写 `for range s`，不要写 `for _ = range s`。
-- `MUST`：不要用 `_` 忽略 error。
-- `SHOULD`：blank identifier 用于明确表达“此值有意忽略”，而不是规避设计问题。
+- [SHOULD] 变量名应短于长，只保留真正区分语义的部分，避免无意义的冗余词。
+- [SHOULD NOT] 不要把类型写进变量名，例如避免 `nicknameStr`、`userSlice`；只有在需要刻意区分转换前后类型时才值得这么做。
+- [MUST] 首字母缩略词必须全大写，例如 `XMLRequest`；如果缩略词位于未导出标识符开头，则保持小写风格，例如 `xmlRequest`。
+- [SHOULD] 如果使用短变量名，如 `i`、`j`、`v`，它们在相似上下文里的语义应保持一致，不要同一类循环里随意换成另一组短名。
 
-### 6.4 零值与初始化
+### 3.4 Receiver
 
-- `SHOULD`：优先利用 Go 的零值，使类型在零值下尽量可用。
-- `SHOULD`：初始化新变量时，非零值优先 `:=`，零值优先 `var`。
-- `SHOULD`：当值需要稍后填充，例如 `json.Unmarshal` 目标，优先零值声明。
-- `SHOULD`：空 slice 默认优先 nil slice，即 `var s []T`。
-- `SHOULD`：如果 JSON 编码等场景明确需要 `[]` 而不是 `null`，可以使用非 nil 空 slice。
-- `MUST`：map 在写入前必须显式初始化。
-- `SHOULD`：已知容量且性能敏感时，合理使用 `make` 进行预分配；否则不要为“可能更快”提前增加复杂度。
+- [SHOULD] receiver 名使用类型名的一到两个字母缩写，并在同一类型的所有方法中保持一致。
+- [SHOULD NOT] receiver 名不要用 `self`、`this`、`me` 这类泛化名字，因为它们既不地道，也不表达具体类型身份。
 
-### 6.5 in-band errors
+## 4. Control Structures
 
-- `MUST`：除非返回值本身就允许自然表示“无结果”，否则不要用 `-1`、`""`、`nil` 等 in-band error 表示失败。
-- `SHOULD`：优先额外返回 `bool` 或 `error`。
-- `SHOULD`：让错误返回值放在最后，便于调用方自然处理。
+### 4.1 If
 
-### 6.6 named result parameters 与 naked returns
+- [SHOULD] 能不用 `else` 就尽量不用 `else`，优先通过提前返回或先处理异常分支来降低嵌套深度。
+- [RECOMMENDED] 相比 `if/else`，更推荐先初始化默认值，再在 `if` 分支中按需改写，这样主流程更线性、更易读。
 
-- `SHOULD`：只有在返回多个同类型值、文档可读性明显提升、或 deferred closure 需要修改返回值时，才使用 named result parameters。
-- `AVOID`：仅仅为了少写一行局部变量而命名返回值。
-- `MUST`：不要只是为了启用 naked return 而命名返回值。
-- `SHOULD`：naked return 只用于非常短、非常直接的函数。
-- `AVOID`：在中长函数里使用 naked return，这会降低可读性并增加维护成本。
+### 4.2 For
 
-### 6.7 pass values
+- [SHOULD] `for` 循环里只声明你真正需要的变量；只用 value 就写 `_, value := range ...`，只用 key 就直接写 `for key := range ...`。
 
-- `SHOULD`：默认按值传递参数；只有在需要共享修改、避免高成本复制、或表达“可为空”语义时才使用指针。
-- `AVOID`：仅为了“省几个字节拷贝”就把小对象或基础类型全部改成指针。
-- `MUST`：不要传递指向 interface 的指针。
-- `SHOULD`：像 `string`、`time.Time`、小 struct 这类天然值语义对象，优先直接传值。
-- `SHOULD`：如果函数需要修改输入、或输入持有锁/大数组/大 struct，优先传指针。
+### 4.3 Switch
 
-### 6.8 map iteration
+- [RECOMMENDED] 多分支判断优先用 `switch` 替代一串 `if`，在无限循环里处理多种状态时也优先用 `switch` 或对应的分支结构组织逻辑。
+- [SHOULD] 谨慎使用 `fallthrough`；它会跳过下一个 case 的条件判断，容易制造隐蔽行为，因此一旦使用就必须特别注意分支顺序，而且不能出现在最后一个 case 中。
 
-- `MUST`：涉及 SQL 构造、序列化输出、签名计算或测试断言时，不要依赖 map 的遍历顺序。
-- `SHOULD`：如果输出顺序会影响日志、查询文本、错误复现或测试稳定性，先取 key 列表再排序。
+## 5. Functions
 
-## 7. 错误处理
+### 5.1 Length
 
-### 7.1 基本原则
+- [SHOULD] 函数尽量小而聚焦；当一个函数开始变得难改、难测、难复用时，应主动拆成更小的辅助函数。
 
-- `MUST`：任何返回 error 的调用都必须被处理、返回，或在极少数情况下转成 panic。
-- `MUST`：常规业务流程中不要使用 panic。
-- `SHOULD`：error 是值，错误处理逻辑同样要追求可读性和复用性。
+### 5.2 Grouping and Ordering
 
-### 7.2 错误字符串
+- [SHOULD] 同一文件中的函数按大致调用顺序排列，让读者可以顺着执行路径自上而下理解代码。
+- [SHOULD] 同一文件中的函数按 receiver 分组，把同一类型的方法放在一起。
+- [SHOULD] 导出函数放在文件靠前位置，并位于 `struct`、`const`、`var` 定义之后，优先暴露对外 API。
+- [MAY] `newXYZ()` / `NewXYZ()` 可以放在类型定义之后、该 receiver 的其他方法之前，作为理解类型的入口。
+- [SHOULD] 普通工具函数放在文件后部，不要打散按 receiver 建立的主结构。
 
-- `MUST`：错误字符串不以大写字母开头，除非首词是专有名词或缩略词。
-- `MUST`：错误字符串不以标点结尾。
-- `MUST`：错误字符串使用 ASCII 英文，不使用中文或拼音。
-- `SHOULD`：如果缺少上下文，可以统一加 package 前缀，如 `gif: invalid pixel value`。
+### 5.3 Context
 
-### 7.3 错误变量与自定义错误
+- [SHOULD] 只要函数使用 `context`，就把它作为第一个参数，以保持整个调用链一致。
+- [SHOULD NOT] 不要把 `context.Context` 存成 struct 成员，而应把 `ctx` 显式作为参数传入；只有当方法签名必须兼容外部接口时才可例外。
 
-- `SHOULD`：只出现一次且不需要判定的错误，直接用 `errors.New` 或 `fmt.Errorf` 返回。
-- `SHOULD`：需要多处复用或被外部捕获的错误，定义为具名错误变量。
-- `SHOULD`：一个文件只有一个错误值时，可放在文件顶部；多个错误值按逻辑块就近放置。
-- `SHOULD`：复杂错误类型放在 `error.go`。
-- `MUST`：自定义错误类型以 `Error` 结尾，并实现：
-  - `Error() string`
-  - `Unwrap() error`
-  - 持有底层 `Err error` 字段
+### 5.4 Named Result Parameters
 
-## 8. 生命周期与并发边界
+- [RECOMMENDED] 当具名返回值能明显提升可读性时使用它，尤其是在返回多个同类型值、需要直接表达每个返回值含义时。
+- [RECOMMENDED] 只有在函数足够短且逻辑足够简单时才使用裸返回，避免它反过来损害理解成本。
 
-- `SHOULD`：`Start`/`Stop` 一类生命周期 API 优先由实现方自行启动 goroutine，并让调用方通过返回值和 `Stop` 感知失败与退出。
-- `MUST`：库代码不要用 `log.Fatal`/`log.Fatalf` 处理常规错误；把错误返回给调用方，由 `main` 包或顶层 runner 决定如何退出。
-- `SHOULD`：停止流程应尽量幂等；如果组件支持 `Stop`，重复调用不应引发 panic。
+### 5.5 Defer
 
-### 7.4 wrap / unwrap / 判定
+- [SHOULD] 文件、锁等资源的清理优先使用 `defer`，这样既能避免遗漏释放，也能让“获取资源”和“释放资源”的代码保持邻近。
 
-- `MUST`：需要保留原始错误链时，使用 `fmt.Errorf("...: %w", err)`。
-- `MUST`：判定错误类型或错误值时，用 `errors.Is` / `errors.As`。
-- `SHOULD`：只在确实需要向下兼容旧实现时直接调用 `errors.Unwrap`。
-- `AVOID`：通过比较错误字符串进行错误分类。
+### 5.6 Pass Values vs Pointers
 
-### 7.5 API 文档中的错误约定
+- [RECOMMENDED] 大结构体或未来可能增长的结构体优先传指针，其余场景优先传值；不要为了省几个字节滥用指针，尤其避免 `*string`、`*interface` 这类通常多余的写法，而对 slice、map、channel、string、func、interface 也要意识到它们本身已带引用语义。
 
-- `SHOULD`：文档化重要的 sentinel error 和自定义错误类型。
-- `SHOULD`：如果函数在 `ctx` 取消时返回的不是 `ctx.Err()`，应在注释里说清楚。
-- `SHOULD`：如果某个资源需要调用方关闭，应在 doc comment 明确写出 cleanup 责任。
+## 6. Data
 
-## 8. panic / recover / iota
+### 6.1 nil is a valid slice
 
-### 8.1 panic
+- [RECOMMENDED] 零值 slice（`var nums []int`）应视为可立即使用，不必先 `make()`，因为 `nil` slice 本身就是合法的空 slice。
+- [RECOMMENDED] 需要返回“空结果”时，优先返回 `nil`，不要显式返回长度为 0 的 slice。
 
-- `AVOID`：业务代码中使用 panic。
-- `SHOULD`：启动阶段遇到不可恢复错误时，可在 `init` 或 `main` 中 panic。
-- `SHOULD`：若错误可被调用方处理，返回 error 而不是 panic。
+## 7. Initialization
 
-### 8.2 recover
+### 7.1 Constants
 
-- `MUST`：`recover` 只能在 `defer` 的函数里生效。
-- `MUST`：`recover` 只对当前 goroutine 生效。
-- `SHOULD`：如果恢复 panic 后继续运行，至少记录足够上下文；必要时记录调用栈。
-- `SHOULD`：如果不是可识别、可屏蔽的 panic，恢复后重新 panic。
+- [MUST] 常量的定义表达式必须是编译期可求值的常量表达式；Go 常量只能是数字、字符、字符串或布尔值，不能依赖运行期计算。
 
-### 8.3 iota
+### 7.2 Initializing Structs
 
-- `SHOULD`：`iota` 主要用于内部枚举常量，不建议在业务协议或外部 API 里滥用。
-- `MUST`：枚举值使用显式自定义类型。
-- `SHOULD`：相关枚举在同一个 `const` 组中声明。
+- [SHOULD] 初始化结构体时几乎总是显式写出字段名，以提高可读性并降低字段顺序变化带来的风险。
+- [SHOULD] 如果声明结构体时省略了所有字段，就用 `var user User`，不要写成 `user := User{}`，以明确表达“这里只是在拿零值”。
 
-## 9. context、并发与生命周期
+### 7.3 Initializing Struct References
 
-### 9.1 context
+- [SHOULD] 初始化结构体指针时使用 `&T{}`，不要使用 `new(T)`，这样风格更一致，也更便于在创建时直接填字段。
 
-- `MUST`：使用 `context.Context` 时，参数名统一为 `ctx`，并放在第一个参数位置。
-- `SHOULD`：即使暂时觉得“用不到”，也优先把 `ctx` 沿调用链透传下去。
-- `MUST`：不要把 `Context` 作为 struct 字段存储，除非方法签名必须满足第三方接口。
-- `MUST`：不要自定义 `Context` 类型，也不要把接口类型替代为其他抽象。
-- `SHOULD`：业务数据优先通过普通参数、receiver 或结构体字段传递，不滥用 `ctx.Value`。
-- `SHOULD`：如果 API 对 context 的 deadline、value、生命周期有非直觉要求，必须文档化。
+### 7.4 Initializing Maps
 
-### 9.2 goroutine lifetimes
+- [SHOULD] 空 map 或通过代码逐步填充的 map 使用 `make(..)` 初始化，以清楚区分“nil map 声明”和“可写 map 初始化”，并为以后添加 size hint 留出空间。
 
-- `MUST`：启动 goroutine 时，要让其退出条件清晰可推断。
-- `MUST`：避免因 channel 阻塞导致 goroutine 泄漏。
-- `SHOULD`：并发代码尽量简单，使 goroutine 生命周期一眼可见。
-- `SHOULD`：如果退出逻辑不显而易见，必须在代码或注释中说明何时退出、为何退出。
+### 7.5 The init function
 
-### 9.3 synchronous functions
+- [SHOULD] 能不用 `init()` 就不要用 `init()`；如果必须用，也要避免依赖其他 `init()` 的执行顺序或副作用，避免访问全局/环境状态，并避免 I/O。
 
-- `SHOULD`：默认优先设计同步函数。
-- `SHOULD`：如无必要，不要把并发复杂度强加给调用方。
-- `SHOULD`：如果调用方需要并发，可由调用方在外层起 goroutine。
+## 8. Methods
 
-### 9.4 copying
+### 8.1 Receiver Names
 
-- `MUST`：不要随意复制带内部引用语义或指针方法集的外部 struct。
-- `SHOULD`：如果某类型的方法主要定义在 `*T` 上，默认不要复制 `T` 值。
+- [SHOULD] receiver 名优先使用类型名的一到两个字母缩写，让它既短又能看出对应类型。
 
-### 9.5 randomness
+### 8.2 Receiver Type
 
-- `MUST`：密钥、token、nonce、一次性验证码等安全敏感随机数使用 `crypto/rand`。
-- `AVOID`：用 `math/rand` 生成安全敏感数据。
+- [RECOMMENDED] receiver 类型拿不准时优先用指针；凡是需要修改 receiver、包含锁字段、对象较大、需要共享外部变化，或希望避免值复制语义误导时，都应使用指针 receiver，且不要在同一类型上混用值 receiver 和指针 receiver。
 
-## 10. 接口与 API 设计
+## 9. Interfaces and Other Types
 
-- `MUST`：不要在实现侧预先定义“也许以后会用到”的接口。
-- `MUST`：不要为了测试而导出接口或测试替身类型。
-- `SHOULD`：先写具体类型；只有在出现真实替换需求后再提炼接口。
-- `SHOULD`：消费者定义只依赖自己真正使用的方法集。
-- `SHOULD`：当接口本身是协议边界时，接口文档要像“用户手册”一样完整，说明行为、边界、并发与错误语义。
-- `SHOULD`：如果函数返回资源句柄、后台 worker、stream、ticker 或连接，必须写清楚如何关闭、何时关闭、取消后语义如何。
-- `AVOID`：仅为了“看起来更抽象”而包装已有生成代码接口或 RPC 客户端。
+- [RECOMMENDED] 对会在系统中广泛传递的能力定义接口，`setup` / `new..` 这类函数优先返回接口而不是具体结构体；真正实现接口的仍然是结构体，这样更利于替换、测试和编译期校验。
 
-## 11. 测试规范
+## 10. The Blank Identifier
 
-### 11.1 基本风格
+### 10.1 Blank Imported Package
 
-- `SHOULD`：测试代码也按生产代码标准维护。
-- `SHOULD`：表驱动测试在能减少重复并突出关键信息时优先使用。
-- `SHOULD`：大型测试表或相邻字段类型相同的 struct literal 优先写字段名。
-- `SHOULD`：优先让 `Test` 函数自己表达断言，而不是堆大量 assertion helper。
+- [MUST] 导入包时必须使用显式包名或别名，让每个依赖都清楚地作为命名空间出现。
+- [MUST NOT] 不要用空白标识符 `_` 导入包，因为它只会触发初始化副作用；只有少数必须靠空导入注册驱动的基础库场景可以例外。
 
-### 11.2 失败信息
+### 10.2 Ignore Values
 
-- `MUST`：失败信息要包含输入、实际值和期望值。
-- `SHOULD`：保持消息顺序为“got / want”。
-- `SHOULD`：复杂对象比较优先输出可读 diff，例如 `cmp.Diff` 风格。
+- [MUST NOT] 不能用空白标识符忽略函数返回的 error，错误必须被显式处理，否则会直接损害稳定性、可靠性和可测试性。
 
-### 11.3 t.Error / t.Fatal
+### 10.3 Interface Check
 
-- `SHOULD`：默认优先 `t.Error`，让一个测试尽量报告更多独立问题。
-- `SHOULD`：只有在后续步骤无法继续时，才用 `t.Fatal` / `t.Fatalf`。
-- `SHOULD`：表驱动测试中，如果某个 case 失败但不影响其他 case，优先 `t.Error` 加 `continue`，或使用 `t.Run` 隔离为子测试。
-- `MUST`：不要在其他 goroutine 中调用 `t.Fatal` / `t.FailNow`。
+- [SHOULD] 使用空白标识符做接口实现检查，例如 `var _ Iface = (*impl)(nil)`，把“必须实现某接口”的约束提前到编译期暴露。
 
-### 11.4 helpers 与 cleanup
+## 11. Errors
 
-- `SHOULD`：测试 helper 若会报告失败，使用 `t.Helper()`。
-- `SHOULD`：setup / cleanup helper 发生失败时，允许在 helper 内直接 `t.Fatal`，但错误信息要给出上下文。
-- `SHOULD`：能用 `t.Cleanup` 简化资源回收时优先使用。
+### 11.1 Error Wrapping
 
-### 11.5 集成测试
+- [RECOMMENDED NOT] 给错误补充上下文时不要滥用 `failed to` 这类显然且会层层堆叠的表述；只补最必要的上下文，例如 `new store: %w`。
 
-- `SHOULD`：组件间通过 HTTP / RPC 交互时，优先使用真实 transport 连接测试版本后端，而不是手写假客户端。
-- `SHOULD`：尽量通过公开 API 测试真实实现，不要为了 mock 而扭曲生产 API 设计。
+### 11.2 Don't Panic
 
-## 12. Go Modules 与版本管理
+- [MUST] 生产环境代码必须避免 `panic`；除了启动或初始化阶段遇到绝对无法恢复的错误外，正常错误都应通过 `error` 返回给调用方决定如何处理。
 
-### 12.1 基础要求
+### 11.3 Recover
 
-- `MUST`：每个模块根目录只有一个 `go.mod`。
-- `MUST`：`go.mod` 与 `go.sum` 提交到版本控制。
-- `SHOULD`：依赖变更后运行 `go mod tidy`。
-- `SHOULD`：必要时用 `go mod why -m`、`go mod graph` 分析依赖来源。
+- [SHOULD] 对可能触发 panic 的代码，包括数组越界、类型断言失败等运行时错误，使用 `recover` 做局部保护；注意它只在 `defer` 中生效，且只影响当前 goroutine。
 
-### 12.2 版本与发布
+## 12. Concurrency
 
-- `MUST`：发布版本 tag 使用 `vX.Y.Z`。
-- `SHOULD`：`v0.x.x` 视为实验阶段，不兼容改动可以不升 major，但建议升 minor。
-- `MUST`：`v1.x.x` 起遵守语义化版本。
-- `MUST`：`v2+` 模块使用 semantic import versioning，module path 追加 `/vN`。
-- `MUST`：从 `v1` 升到 `v2+` 时，在仓库中新建 `vN/` 目录，复制代码与 `go.mod`，并把 `module path` 改成带 `/vN` 的路径。
+### 12.1 Goroutine
 
-### 12.3 依赖方 import 规则
+- [MUST] 每个 goroutine 都必须有明确的退出时机和退出条件，防止 goroutine 泄漏；常见手段是传 `context` 或显式等待退出。
+- [SHOULD] 执行复杂任务的 goroutine 应具备恢复策略，例如在内部 `defer recover()` 并记录日志，以避免 panic 扩散成进程级问题。
 
-- `MUST`：依赖 `v0` / `v1` 模块时，import path 不带版本后缀。
-- `MUST`：依赖 `v2+` 模块时，import path 带 `/vN`。
-- `SHOULD`：升级依赖版本后，及时修复 API 不兼容问题并补充测试。
+### 12.2 Use Channels
 
-## 13. 适用于 Codex 的执行清单
+- [SHOULD] 优先通过 channel 通信，而不是直接共享内存，让并发代码的协作关系更清楚、更可扩展。
+- [SHOULD] channel 默认先使用无缓冲版本，只有在有明确指标或 profiling 证据表明这里是瓶颈时，再改为有缓冲或其他更激进的优化方式。
 
-每次让 Codex 修改 Go 代码前后，都按以下顺序检查：
+### 12.3 Avoid Explosion
 
-1. 先看清 package 边界、局部命名和已有风格，优先保持一致。
-2. 先选最简单的实现，不预先引入接口、抽象层或并发。
-3. 写代码时同步考虑：
-   - 命名是否符合 Go 习惯
-   - 导出符号是否需要英文注释
-   - 错误是否被正确处理与 wrap
-   - context 是否首参透传
-   - goroutine 是否有退出条件
-4. 改完后检查：
-   - `gofmt` / `goimports`
-   - import 分组
-   - 是否引入了冗余 `else`
-   - 是否错误地忽略了 error
-   - 是否误用了 panic、dot import、blank import、提前接口化
-5. 能验证时执行：
-   - 改动包的 `go test`
-   - 影响面较大时 `go test ./...`
+- [MUST NOT] 不要无限制地创建 goroutine，尤其是在高流量在线接口的关键路径上；需要通过 goroutine pool、限流或类似机制控制并发规模。
 
-## 14. 参考来源
+### 12.4 Initialization
 
-- [Google Go Style Guide - Guide](https://google.github.io/styleguide/go/guide)
-- [Google Go Style Guide - Decisions](https://google.github.io/styleguide/go/decisions)
-- [Google Go Style Guide - Best Practices](https://google.github.io/styleguide/go/best-practices)
-- [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
-- [Effective Go](https://go.dev/doc/effective_go)
-- [Go Blog - Package names](https://go.dev/blog/package-names)
-- [Go Blog - Using Go Modules](https://go.dev/blog/using-go-modules)
-- [Go Blog - Migrating to Go Modules](https://go.dev/blog/migrating-to-go-modules)
-- [Go Blog - Publishing Go Modules](https://go.dev/blog/publishing-go-modules)
-- [Go Blog - Go Modules: v2 and Beyond](https://go.dev/blog/v2-go-modules)
+- [SHOULD] 一次性初始化或单例模式优先使用 `sync.Once`，不要依赖 `init()`，尤其当初始化逻辑可能失败时更应如此。
+
+### 12.5 Standard Library
+
+- [SHOULD] `sync.Mutex` / `sync.RWMutex` / `sync.Cond` 等同步原语只在构建基础库且对性能敏感的场景中作为主要方案；普通业务并发优先考虑 channel 风格。
+- [RECOMMENDED] 关键路径上频繁创建和销毁的复杂对象优先考虑 `sync.Pool`，以降低分配和 GC 压力。
+- [RECOMMENDED] 在合适场景下充分利用 `sync.Map` 和 `atomic.Value`，避免手写不必要的并发控制样板代码。
