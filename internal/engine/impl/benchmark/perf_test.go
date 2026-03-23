@@ -1,7 +1,6 @@
 package benchmark
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/exact"
 	"Go2NetSpectra/internal/engine/impl/sketch"
@@ -12,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"sync"
 	"testing"
 
@@ -172,25 +170,14 @@ func BenchmarkAggregator(b *testing.B) {
 	defer pcapReader.Close()
 	log.Printf("Reading packets from '%s'...", pcapFilePath)
 
-	packetChannel := make(chan *v1.PacketInfo, 10000)
+	packetChannel := make(chan *model.PacketInfo, 10000)
 	go func() {
 		pcapReader.ReadPackets(packetChannel)
 		close(packetChannel)
 	}()
 
-	for pbPacket := range packetChannel {
-		info := &model.PacketInfo{
-			Timestamp: pbPacket.Timestamp.AsTime(),
-			Length:    int(pbPacket.Length),
-			FiveTuple: model.FiveTuple{
-				SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-				DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-				SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-				DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-				Protocol: uint8(pbPacket.FiveTuple.Protocol),
-			},
-		}
-		packets = append(packets, info)
+	for packet := range packetChannel {
+		packets = append(packets, packet)
 	}
 
 	// b.Run("CM_Parallel", run_cm_parallel)

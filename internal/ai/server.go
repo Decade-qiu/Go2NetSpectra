@@ -4,65 +4,84 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 
-	v1 "Go2NetSpectra/api/gen/v1"
+	v1 "Go2NetSpectra/api/gen/thrift/v1"
 	"Go2NetSpectra/internal/config"
 
-	"google.golang.org/grpc"
+	thrift "github.com/apache/thrift/lib/go/thrift"
 )
 
-// Server exposes the AI gRPC API.
+const thriftBufferSize = 32 * 1024
+
+// Server exposes the AI Thrift RPC API.
 type Server struct {
-	v1.UnimplementedAIServiceServer
 	alerterAnalyzer *AlerterAnalyzer
 	commonAnalyzer  *CommonAnalyzer
+	promptSessions  *promptSessionStore
 }
 
-// RunServer starts the AI gRPC server and blocks until shutdown.
-func RunServer(ctx context.Context, cfg *config.Config) error {
+func newServer(cfg *config.Config) (*Server, error) {
 	alerterAnalyzer, err := NewAlerterAnalyzer(&cfg.AI)
 	if err != nil {
-		return fmt.Errorf("failed to create alerter analyzer: %w", err)
+		return nil, fmt.Errorf("failed to create alerter analyzer: %w", err)
 	}
 	commonAnalyzer, err := NewCommonAnalyzer(&cfg.AI)
 	if err != nil {
-		return fmt.Errorf("failed to create common analyzer: %w", err)
+		return nil, fmt.Errorf("failed to create common analyzer: %w", err)
 	}
 
-	listener, err := net.Listen("tcp", cfg.AI.GRPCListenAddr)
-	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", cfg.AI.GRPCListenAddr, err)
-	}
-	defer listener.Close()
-
-	server := grpc.NewServer()
-	v1.RegisterAIServiceServer(server, &Server{
+	return &Server{
 		alerterAnalyzer: alerterAnalyzer,
 		commonAnalyzer:  commonAnalyzer,
-	})
+		promptSessions:  newPromptSessionStore(commonAnalyzer.AnalyzeStream, defaultPromptSessionTTL),
+	}, nil
+}
+
+// RunServer starts the AI Thrift RPC server and blocks until shutdown.
+func RunServer(ctx context.Context, cfg *config.Config) error {
+	service, err := newServer(cfg)
+	if err != nil {
+		return err
+	}
+	defer service.promptSessions.Stop()
+
+	serverTransport, err := thrift.NewTServerSocket(cfg.AI.RPCListenAddr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", cfg.AI.RPCListenAddr, err)
+	}
+
+	transportFactory := thrift.NewTBufferedTransportFactory(thriftBufferSize)
+	protocolFactory := thrift.NewTBinaryProtocolFactoryConf(&thrift.TConfiguration{})
+	processor := v1.NewAIServiceProcessor(service)
+	server := thrift.NewTSimpleServer4(processor, serverTransport, transportFactory, protocolFactory)
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("AI-gRPC API server starting on %s", cfg.AI.GRPCListenAddr)
-		if serveErr := server.Serve(listener); serveErr != nil {
-			errCh <- fmt.Errorf("failed to serve grpc: %w", serveErr)
+		log.Printf("AI RPC server starting on %s", cfg.AI.RPCListenAddr)
+		if serveErr := server.Serve(); serveErr != nil {
+			errCh <- fmt.Errorf("failed to serve thrift rpc: %w", serveErr)
 		}
 	}()
 
 	select {
 	case err := <-errCh:
-		server.GracefulStop()
+		if stopErr := server.Stop(); stopErr != nil {
+			log.Printf("AI RPC server stop error after serve failure: %v", stopErr)
+		}
 		return err
 	case <-ctx.Done():
-		server.GracefulStop()
-		return nil
 	}
+
+	if err := server.Stop(); err != nil {
+		return fmt.Errorf("failed to stop ai rpc server: %w", err)
+	}
+
+	return nil
 }
 
 // AnalyzeTraffic routes alert summaries to the alert-focused analyzer.
 func (s *Server) AnalyzeTraffic(ctx context.Context, req *v1.AnalyzeTrafficRequest) (*v1.AnalyzeTrafficResponse, error) {
-	log.Printf("Received AnalyzeTraffic request, routing to AlerterAnalyzer...")
+	log.Printf("Received AnalyzeTraffic request, routing to AlerterAnalyzer")
 	output, err := s.alerterAnalyzer.AnalyzeTraffic(ctx, req.GetTextInput())
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze traffic: %w", err)
@@ -70,11 +89,18 @@ func (s *Server) AnalyzeTraffic(ctx context.Context, req *v1.AnalyzeTrafficReque
 	return &v1.AnalyzeTrafficResponse{TextOutput: output}, nil
 }
 
-// AnalyzePromptStream streams chunked AI responses back to the client.
-func (s *Server) AnalyzePromptStream(req *v1.AnalyzePromptRequest, stream v1.AIService_AnalyzePromptStreamServer) error {
-	log.Printf("Received streaming request for prompt: %s", req.GetPrompt())
-	sendChunk := func(chunk string) error {
-		return stream.Send(&v1.AnalyzePromptResponse{Chunk: chunk})
-	}
-	return s.commonAnalyzer.AnalyzeStream(stream.Context(), req.GetPrompt(), sendChunk)
+// StartPromptAnalysis creates a session for incremental prompt analysis.
+func (s *Server) StartPromptAnalysis(ctx context.Context, req *v1.PromptAnalysisRequest) (*v1.PromptAnalysisSession, error) {
+	log.Printf("Received StartPromptAnalysis request")
+	return s.promptSessions.Start(ctx, req.GetPrompt())
+}
+
+// ReadPromptChunks reads queued chunks for an active prompt session.
+func (s *Server) ReadPromptChunks(ctx context.Context, req *v1.PromptChunkRequest) (*v1.PromptChunkResponse, error) {
+	return s.promptSessions.Read(ctx, req.GetSessionID(), req.GetMaxChunks())
+}
+
+// CancelPromptAnalysis cancels a prompt-analysis session.
+func (s *Server) CancelPromptAnalysis(ctx context.Context, req *v1.PromptCancelRequest) (*v1.PromptCancelResponse, error) {
+	return &v1.PromptCancelResponse{Canceled: s.promptSessions.Cancel(req.GetSessionID())}, nil
 }

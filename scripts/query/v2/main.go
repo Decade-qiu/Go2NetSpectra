@@ -1,7 +1,6 @@
 package main
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"context"
 	"flag"
 	"fmt"
@@ -9,10 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	v1 "Go2NetSpectra/api/gen/thrift/v1"
+
+	thrift "github.com/apache/thrift/lib/go/thrift"
 )
+
+const queryClientTransportBufferSize = 32 * 1024
 
 func main() {
 	// Command-line flags
@@ -31,14 +32,12 @@ func main() {
 		log.Fatal("error: -task flag is required for this mode")
 	}
 
-	// Set up a connection to the server.
-	conn, err := grpc.NewClient(*serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Set up a connection to the RPC server.
+	client, transport, err := newQueryClient(*serverAddr)
 	if err != nil {
 		log.Fatalf("failed to connect to %s: %v", *serverAddr, err)
 	}
-	defer conn.Close()
-
-	client := v1.NewQueryServiceClient(conn)
+	defer transport.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -61,13 +60,15 @@ func main() {
 }
 
 // doAggregateQuery performs an aggregation query.
-func doAggregateQuery(ctx context.Context, client v1.QueryServiceClient, taskName string, endTime string) {
+func doAggregateQuery(ctx context.Context, client *v1.QueryServiceClient, taskName string, endTime string) {
 	log.Printf("Executing aggregation query for task: %s", taskName)
 	log.Printf("Query params - End time: %s", endTime)
 
 	req := &v1.AggregationRequest{
-		TaskName: taskName,
-		EndTime:  parseAndConvert(endTime),
+		EndTimeUnixNano: parseAndConvert(endTime),
+	}
+	if taskName != "" {
+		req.TaskName = &taskName
 	}
 
 	resp, err := client.AggregateFlows(ctx, req)
@@ -90,7 +91,7 @@ func doAggregateQuery(ctx context.Context, client v1.QueryServiceClient, taskNam
 }
 
 // doTraceQuery performs a trace query.
-func doTraceQuery(ctx context.Context, client v1.QueryServiceClient, taskName, flowKeyStr string, endTime string) {
+func doTraceQuery(ctx context.Context, client *v1.QueryServiceClient, taskName, flowKeyStr string, endTime string) {
 	log.Printf("Executing trace query for task '%s' with key '%s'", taskName, flowKeyStr)
 	log.Printf("Query params - End time: %s", endTime)
 
@@ -100,9 +101,9 @@ func doTraceQuery(ctx context.Context, client v1.QueryServiceClient, taskName, f
 	}
 
 	req := &v1.TraceFlowRequest{
-		TaskName: taskName,
-		FlowKeys: flowKeys,
-		EndTime:  parseAndConvert(endTime),
+		TaskName:        taskName,
+		FlowKeys:        flowKeys,
+		EndTimeUnixNano: parseAndConvert(endTime),
 	}
 
 	_resp, err := client.TraceFlow(ctx, req)
@@ -113,8 +114,8 @@ func doTraceQuery(ctx context.Context, client v1.QueryServiceClient, taskName, f
 	resp := _resp.Lifecycle
 
 	log.Println("---", "Flow Lifecycle Result", "---")
-	log.Printf("  First Seen:    %s", resp.FirstSeen.AsTime().Format(time.RFC3339))
-	log.Printf("  Last Seen:     %s", resp.LastSeen.AsTime().Format(time.RFC3339))
+	log.Printf("  First Seen:    %s", time.Unix(0, resp.FirstSeenUnixNano).Format(time.RFC3339))
+	log.Printf("  Last Seen:     %s", time.Unix(0, resp.LastSeenUnixNano).Format(time.RFC3339))
 	log.Printf("  Total Packets: %d", resp.TotalPackets)
 	log.Printf("  Total Bytes:   %d", resp.TotalBytes)
 	log.Println("-----------------------------")
@@ -138,16 +139,16 @@ func parseFlowKeys(keyStr string) (map[string]string, error) {
 }
 
 // doHeavyHittersQuery performs a heavy hitters query.
-func doHeavyHittersQuery(ctx context.Context, client v1.QueryServiceClient, taskName string, hhType int, limit int, endTime string) {
+func doHeavyHittersQuery(ctx context.Context, client *v1.QueryServiceClient, taskName string, hhType int, limit int, endTime string) {
 	log.Printf("Executing heavy hitters query for task: %s", taskName)
 	log.Printf("Heavy hitter type: %d, Limit: %d", hhType, limit)
 	log.Printf("Query params - End time: %s", endTime)
 
 	req := &v1.HeavyHittersRequest{
-		TaskName: taskName,
-		Type:     int32(hhType),
-		EndTime:  parseAndConvert(endTime),
-		Limit:    int32(limit),
+		TaskName:        taskName,
+		Type:            int32(hhType),
+		EndTimeUnixNano: parseAndConvert(endTime),
+		Limit:           int32(limit),
 	}
 
 	resp, err := client.QueryHeavyHitters(ctx, req)
@@ -169,16 +170,16 @@ func doHeavyHittersQuery(ctx context.Context, client v1.QueryServiceClient, task
 }
 
 // doSuperSpreaderQuery performs a super spreader query.
-func doSuperSpreaderQuery(ctx context.Context, client v1.QueryServiceClient, taskName string, limit int, endTime string) {
+func doSuperSpreaderQuery(ctx context.Context, client *v1.QueryServiceClient, taskName string, limit int, endTime string) {
 	log.Printf("Executing super spreader query for task: %s", taskName)
 	log.Printf("Limit: %d", limit)
 	log.Printf("Query params - End time: %s", endTime)
 
 	req := &v1.HeavyHittersRequest{
-		TaskName: taskName,
-		Type:     2, // Type 2 is for SuperSpreaders
-		EndTime:  parseAndConvert(endTime),
-		Limit:    int32(limit),
+		TaskName:        taskName,
+		Type:            2, // Type 2 is for SuperSpreaders
+		EndTimeUnixNano: parseAndConvert(endTime),
+		Limit:           int32(limit),
 	}
 
 	resp, err := client.QueryHeavyHitters(ctx, req)
@@ -199,12 +200,31 @@ func doSuperSpreaderQuery(ctx context.Context, client v1.QueryServiceClient, tas
 	log.Println("------------------------------")
 }
 
-func parseAndConvert(endTimeStr string) *timestamppb.Timestamp {
+func parseAndConvert(endTimeStr string) *int64 {
 	t, err := time.Parse(time.RFC3339, endTimeStr)
 	if err != nil {
 		log.Fatalf("failed to parse time string: %v", err)
 		return nil
 	}
-	ts := timestamppb.New(t)
-	return ts
+	unixNano := t.UnixNano()
+	return &unixNano
+}
+
+func newQueryClient(addr string) (*v1.QueryServiceClient, thrift.TTransport, error) {
+	conf := &thrift.TConfiguration{
+		ConnectTimeout: 5 * time.Second,
+		SocketTimeout:  15 * time.Second,
+	}
+	socket := thrift.NewTSocketConf(addr, conf)
+	transportFactory := thrift.NewTBufferedTransportFactory(queryClientTransportBufferSize)
+	transport, err := transportFactory.GetTransport(socket)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build thrift transport: %w", err)
+	}
+	if err := transport.Open(); err != nil {
+		return nil, nil, fmt.Errorf("open thrift transport: %w", err)
+	}
+
+	protocolFactory := thrift.NewTBinaryProtocolFactoryConf(conf)
+	return v1.NewQueryServiceClientFactory(transport, protocolFactory), transport, nil
 }

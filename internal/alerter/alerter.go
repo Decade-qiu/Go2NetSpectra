@@ -8,14 +8,15 @@ import (
 	"sync"
 	"time"
 
-	v1 "Go2NetSpectra/api/gen/v1"
+	v1 "Go2NetSpectra/api/gen/thrift/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/model"
 
+	thrift "github.com/apache/thrift/lib/go/thrift"
 	"github.com/gomarkdown/markdown"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
+
+const aiClientBufferSize = 32 * 1024
 
 // Alerter is responsible for evaluating task snapshots against predefined rules
 // and triggering notifications if rules are violated.
@@ -30,8 +31,8 @@ type Alerter struct {
 
 	// AI analysis components
 	aiEnabled bool
-	aiClient  v1.AIServiceClient
-	aiConn    *grpc.ClientConn
+	aiClient  *v1.AIServiceClient
+	aiConn    thrift.TTransport
 }
 
 // NewAlerter creates a new Alerter instance.
@@ -52,12 +53,12 @@ func NewAlerter(cfg *config.AlerterConfig, tasks []model.Task, notifier model.No
 
 	if a.aiEnabled {
 		log.Printf("AI analysis is enabled, connecting to AI service at %s", cfg.AIAnalysis.ServiceAddr)
-		conn, err := grpc.NewClient(cfg.AIAnalysis.ServiceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		client, conn, err := newAIClient(cfg.AIAnalysis.ServiceAddr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to AI service: %w", err)
 		}
 		a.aiConn = conn
-		a.aiClient = v1.NewAIServiceClient(conn)
+		a.aiClient = client
 	}
 
 	return a, nil
@@ -183,4 +184,23 @@ func (a *Alerter) getAIAnalysis(alertContent string) (string, error) {
 	}
 
 	return resp.GetTextOutput(), nil
+}
+
+func newAIClient(addr string) (*v1.AIServiceClient, thrift.TTransport, error) {
+	conf := &thrift.TConfiguration{
+		ConnectTimeout: 5 * time.Second,
+		SocketTimeout:  60 * time.Second,
+	}
+	socket := thrift.NewTSocketConf(addr, conf)
+	transportFactory := thrift.NewTBufferedTransportFactory(aiClientBufferSize)
+	transport, err := transportFactory.GetTransport(socket)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build thrift transport: %w", err)
+	}
+	if err := transport.Open(); err != nil {
+		return nil, nil, fmt.Errorf("open thrift transport: %w", err)
+	}
+
+	protocolFactory := thrift.NewTBinaryProtocolFactoryConf(conf)
+	return v1.NewAIServiceClientFactory(transport, protocolFactory), transport, nil
 }

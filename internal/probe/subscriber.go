@@ -33,7 +33,7 @@ func (s *Subscriber) Start(handler PacketHandler) error {
 	sub, err := s.nc.Subscribe(s.subject, func(msg *nats.Msg) {
 		info, err := UnmarshalPacketInfo(msg.Data)
 		if err != nil {
-			log.Printf("Error decoding protobuf packet: %v", err)
+			log.Printf("Error decoding thrift packet: %v", err)
 			return
 		}
 		handler(info)

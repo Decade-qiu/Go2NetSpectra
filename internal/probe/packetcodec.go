@@ -1,79 +1,91 @@
 package probe
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/model"
+	"context"
 	"errors"
 	"fmt"
 	"net"
+	"sync"
+	"time"
 
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	v1 "Go2NetSpectra/api/gen/thrift/v1"
+
+	thrift "github.com/apache/thrift/lib/go/thrift"
 )
 
 var (
-	errNilPacketInfo  = errors.New("nil packet info")
-	errNilProtoPacket = errors.New("nil proto packet")
-	errNilFiveTuple   = errors.New("nil five tuple")
+	errNilPacketInfo   = errors.New("nil packet info")
+	errNilThriftPacket = errors.New("nil thrift packet")
+	errNilFiveTuple    = errors.New("nil five tuple")
 )
 
-func newProtoPacket(packetInfo *model.PacketInfo) (*v1.PacketInfo, error) {
+var packetSerializerPool = sync.Pool{
+	New: func() any {
+		return thrift.NewTSerializer()
+	},
+}
+
+var packetDeserializerPool = sync.Pool{
+	New: func() any {
+		return thrift.NewTDeserializer()
+	},
+}
+
+func packetInfoToThrift(packetInfo *model.PacketInfo) (*v1.PacketInfo, error) {
 	if packetInfo == nil {
 		return nil, errNilPacketInfo
 	}
 
 	return &v1.PacketInfo{
-		Timestamp: timestamppb.New(packetInfo.Timestamp),
+		TimestampUnixNano: packetInfo.Timestamp.UnixNano(),
 		FiveTuple: &v1.FiveTuple{
-			SrcIp:    append([]byte(nil), packetInfo.FiveTuple.SrcIP...),
-			DstIp:    append([]byte(nil), packetInfo.FiveTuple.DstIP...),
-			SrcPort:  uint32(packetInfo.FiveTuple.SrcPort),
-			DstPort:  uint32(packetInfo.FiveTuple.DstPort),
-			Protocol: uint32(packetInfo.FiveTuple.Protocol),
+			SrcIP:    append([]byte(nil), packetInfo.FiveTuple.SrcIP...),
+			DstIP:    append([]byte(nil), packetInfo.FiveTuple.DstIP...),
+			SrcPort:  int32(packetInfo.FiveTuple.SrcPort),
+			DstPort:  int32(packetInfo.FiveTuple.DstPort),
+			Protocol: int32(packetInfo.FiveTuple.Protocol),
 		},
-		Length: uint64(packetInfo.Length),
+		Length: int64(packetInfo.Length),
 	}, nil
 }
 
-// PacketInfoToProto converts PacketInfo into the protobuf transport shape.
-func PacketInfoToProto(packetInfo *model.PacketInfo) (*v1.PacketInfo, error) {
-	return newProtoPacket(packetInfo)
-}
-
-// MarshalPacketInfo encodes PacketInfo into protobuf bytes.
+// MarshalPacketInfo encodes PacketInfo into Thrift bytes.
 func MarshalPacketInfo(dst []byte, packetInfo *model.PacketInfo) ([]byte, error) {
-	protoPacket, err := newProtoPacket(packetInfo)
+	thriftPacket, err := packetInfoToThrift(packetInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	if dst == nil {
-		dst = make([]byte, 0, proto.Size(protoPacket))
-	}
+	serializer := packetSerializerPool.Get().(*thrift.TSerializer)
+	defer packetSerializerPool.Put(serializer)
 
-	data, err := proto.MarshalOptions{}.MarshalAppend(dst[:0], protoPacket)
+	data, err := serializer.Write(context.Background(), thriftPacket)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal packet info: %w", err)
 	}
 
-	return data, nil
+	if dst == nil {
+		return data, nil
+	}
+
+	return append(dst[:0], data...), nil
 }
 
-// PacketInfoFromProto converts the protobuf transport packet into PacketInfo.
-func PacketInfoFromProto(packet *v1.PacketInfo) (model.PacketInfo, error) {
+func packetInfoFromThrift(packet *v1.PacketInfo) (model.PacketInfo, error) {
 	if packet == nil {
-		return model.PacketInfo{}, errNilProtoPacket
+		return model.PacketInfo{}, errNilThriftPacket
 	}
 	if packet.FiveTuple == nil {
 		return model.PacketInfo{}, errNilFiveTuple
 	}
 
 	return model.PacketInfo{
-		Timestamp: packet.Timestamp.AsTime(),
+		Timestamp: time.Unix(0, packet.TimestampUnixNano),
 		Length:    int(packet.Length),
 		FiveTuple: model.FiveTuple{
-			SrcIP:    append(net.IP(nil), packet.FiveTuple.SrcIp...),
-			DstIP:    append(net.IP(nil), packet.FiveTuple.DstIp...),
+			SrcIP:    append(net.IP(nil), packet.FiveTuple.SrcIP...),
+			DstIP:    append(net.IP(nil), packet.FiveTuple.DstIP...),
 			SrcPort:  uint16(packet.FiveTuple.SrcPort),
 			DstPort:  uint16(packet.FiveTuple.DstPort),
 			Protocol: uint8(packet.FiveTuple.Protocol),
@@ -81,12 +93,15 @@ func PacketInfoFromProto(packet *v1.PacketInfo) (model.PacketInfo, error) {
 	}, nil
 }
 
-// UnmarshalPacketInfo decodes protobuf bytes into PacketInfo.
+// UnmarshalPacketInfo decodes Thrift bytes into PacketInfo.
 func UnmarshalPacketInfo(data []byte) (model.PacketInfo, error) {
-	var packet v1.PacketInfo
-	if err := proto.Unmarshal(data, &packet); err != nil {
+	packet := v1.NewPacketInfo()
+	deserializer := packetDeserializerPool.Get().(*thrift.TDeserializer)
+	defer packetDeserializerPool.Put(deserializer)
+
+	if err := deserializer.Read(context.Background(), packet, data); err != nil {
 		return model.PacketInfo{}, fmt.Errorf("failed to unmarshal packet info: %w", err)
 	}
 
-	return PacketInfoFromProto(&packet)
+	return packetInfoFromThrift(packet)
 }

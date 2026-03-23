@@ -1,17 +1,19 @@
 package main
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"strings"
+	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	v1 "Go2NetSpectra/api/gen/thrift/v1"
+
+	thrift "github.com/apache/thrift/lib/go/thrift"
 )
+
+const askAITransportBufferSize = 32 * 1024
 
 func main() {
 	// 1. Parse command-line flags
@@ -28,31 +30,60 @@ func main() {
 		}
 	}
 
-	// 3. Connect to the gRPC server
-	conn, err := grpc.NewClient(*address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// 3. Connect to the RPC server
+	client, transport, err := newAIClient(*address)
 	if err != nil {
 		log.Fatalf("failed to connect to %s: %v", *address, err)
 	}
-	defer conn.Close()
-	client := v1.NewAIServiceClient(conn)
+	defer transport.Close()
 
-	// 4. Call the streaming RPC
-	log.Println("Sending prompt to AI and waiting for the response stream...")
-	stream, err := client.AnalyzePromptStream(context.Background(), &v1.AnalyzePromptRequest{Prompt: *prompt})
+	// 4. Start prompt-analysis session
+	log.Println("Sending prompt to AI and waiting for chunked responses...")
+	ctx := context.Background()
+	session, err := client.StartPromptAnalysis(ctx, &v1.PromptAnalysisRequest{Prompt: *prompt})
 	if err != nil {
-		log.Fatalf("failed to call AnalyzePromptStream: %v", err)
+		log.Fatalf("failed to call StartPromptAnalysis: %v", err)
 	}
 
-	// 5. Receive and print the stream response
+	// 5. Poll and print chunked responses
+	maxChunks := int32(8)
 	for {
-		resp, err := stream.Recv()
-		if err == io.EOF {
+		resp, err := client.ReadPromptChunks(ctx, &v1.PromptChunkRequest{
+			SessionID: session.SessionID,
+			MaxChunks: &maxChunks,
+		})
+		if err != nil {
+			log.Fatalf("failed to read prompt chunks: %v", err)
+		}
+		for _, chunk := range resp.GetChunks() {
+			fmt.Print(chunk)
+		}
+		if resp.Done {
 			fmt.Println()
+			if resp.ErrorText != nil {
+				log.Fatalf("prompt analysis failed: %s", *resp.ErrorText)
+			}
 			break
 		}
-		if err != nil {
-			log.Fatalf("failed to receive stream response: %v", err)
-		}
-		fmt.Print(resp.GetChunk())
+		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+func newAIClient(addr string) (*v1.AIServiceClient, thrift.TTransport, error) {
+	conf := &thrift.TConfiguration{
+		ConnectTimeout: 5 * time.Second,
+		SocketTimeout:  60 * time.Second,
+	}
+	socket := thrift.NewTSocketConf(addr, conf)
+	transportFactory := thrift.NewTBufferedTransportFactory(askAITransportBufferSize)
+	transport, err := transportFactory.GetTransport(socket)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build thrift transport: %w", err)
+	}
+	if err := transport.Open(); err != nil {
+		return nil, nil, fmt.Errorf("open thrift transport: %w", err)
+	}
+
+	protocolFactory := thrift.NewTBinaryProtocolFactoryConf(conf)
+	return v1.NewAIServiceClientFactory(transport, protocolFactory), transport, nil
 }

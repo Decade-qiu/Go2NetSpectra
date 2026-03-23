@@ -1,7 +1,6 @@
 package manager
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/alerter"
 	"Go2NetSpectra/internal/config"
 	_ "Go2NetSpectra/internal/engine/impl/exact"  // Registers exact task aggregator
@@ -11,7 +10,6 @@ import (
 	"Go2NetSpectra/internal/notification"
 	"fmt"
 	"log"
-	"net"
 	"sync"
 	"time"
 )
@@ -22,7 +20,7 @@ type Manager struct {
 	alerter    *alerter.Alerter
 
 	// Worker pool for concurrent packet processing
-	packetChannel chan *v1.PacketInfo
+	packetChannel chan *model.PacketInfo
 	numWorkers    int
 	workerWg      sync.WaitGroup
 
@@ -79,7 +77,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		alerter:       alertr,
 		period:        period,
 		done:          make(chan struct{}),
-		packetChannel: make(chan *v1.PacketInfo, cfg.Aggregator.SizeOfPacketChannel),
+		packetChannel: make(chan *model.PacketInfo, cfg.Aggregator.SizeOfPacketChannel),
 		numWorkers:    max(1, cfg.Aggregator.NumWorkers),
 	}, nil
 }
@@ -218,41 +216,26 @@ func (m *Manager) Stop() {
 
 func (m *Manager) worker() {
 	defer m.workerWg.Done()
-	for pbPacket := range m.packetChannel {
-		if err := m.processProtoPacket(pbPacket); err != nil {
-			log.Printf("Manager failed to process protobuf packet: %v", err)
+	for packet := range m.packetChannel {
+		if err := m.processPacket(packet); err != nil {
+			log.Printf("Manager failed to process packet: %v", err)
 		}
 	}
 }
 
-// InputChannel returns the protobuf packet input channel consumed by the worker pool.
-func (m *Manager) InputChannel() chan<- *v1.PacketInfo {
+// InputChannel returns the packet input channel consumed by the worker pool.
+func (m *Manager) InputChannel() chan<- *model.PacketInfo {
 	return m.packetChannel
 }
 
-func (m *Manager) processProtoPacket(pbPacket *v1.PacketInfo) error {
-	if pbPacket == nil {
-		return fmt.Errorf("nil protobuf packet")
-	}
-	if pbPacket.FiveTuple == nil {
-		return fmt.Errorf("nil protobuf five tuple")
-	}
-
-	info := &model.PacketInfo{
-		Timestamp: pbPacket.Timestamp.AsTime(),
-		Length:    int(pbPacket.Length),
-		FiveTuple: model.FiveTuple{
-			SrcIP:    append(net.IP(nil), pbPacket.FiveTuple.SrcIp...),
-			DstIP:    append(net.IP(nil), pbPacket.FiveTuple.DstIp...),
-			SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-			DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-			Protocol: uint8(pbPacket.FiveTuple.Protocol),
-		},
+func (m *Manager) processPacket(packet *model.PacketInfo) error {
+	if packet == nil {
+		return fmt.Errorf("nil packet")
 	}
 
 	for _, group := range m.taskGroups {
 		for _, task := range group.Tasks {
-			task.ProcessPacket(info)
+			task.ProcessPacket(packet)
 		}
 	}
 

@@ -1,7 +1,6 @@
 package sketch
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/model"
@@ -24,7 +23,7 @@ func TestSuperSpread(t *testing.T) {
 	defer pcapReader.Close()
 	log.Printf("Reading packets from '%s'...", pcapFilePath)
 
-	packetChannel := make(chan *v1.PacketInfo, 10000)
+	packetChannel := make(chan *model.PacketInfo, 10000)
 
 	SpreadThreshold := uint32(750)
 
@@ -52,19 +51,7 @@ func TestSuperSpread(t *testing.T) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		for pbPacket := range packetChannel {
-			info := &model.PacketInfo{
-				Timestamp: pbPacket.Timestamp.AsTime(),
-				Length:    int(pbPacket.Length),
-				FiveTuple: model.FiveTuple{
-					SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-					DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-					SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-					DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-					Protocol: uint8(pbPacket.FiveTuple.Protocol),
-				},
-			}
-
+		for info := range packetChannel {
 			task.ProcessPacket(info)
 
 			key := info.FiveTuple.DstIP.String()
@@ -202,23 +189,13 @@ func feedFixturePackets(t *testing.T, pcapFilePath string, task model.Task) {
 	}
 	defer pcapReader.Close()
 
-	packetChannel := make(chan *v1.PacketInfo, 1024)
+	packetChannel := make(chan *model.PacketInfo, 1024)
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
-		for pbPacket := range packetChannel {
-			task.ProcessPacket(&model.PacketInfo{
-				Timestamp: pbPacket.Timestamp.AsTime(),
-				Length:    int(pbPacket.Length),
-				FiveTuple: model.FiveTuple{
-					SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-					DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-					SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-					DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-					Protocol: uint8(pbPacket.FiveTuple.Protocol),
-				},
-			})
+		for packet := range packetChannel {
+			task.ProcessPacket(packet)
 		}
 	}()
 

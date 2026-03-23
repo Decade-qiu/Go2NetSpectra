@@ -19,6 +19,6 @@ func main() {
 	defer stop()
 
 	if err := api.RunLegacyHTTPServer(ctx, cfg); err != nil {
-		log.Fatalf("Legacy API server exited with error: %v", err)
+		log.Fatalf("Legacy API server is unsupported after the Thrift cutover: %v", err)
 	}
 }

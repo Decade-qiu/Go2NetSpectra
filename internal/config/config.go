@@ -103,7 +103,7 @@ type ProbeConfig struct {
 
 // APIConfig holds the configuration for the API server.
 type APIConfig struct {
-	GRPCListenAddr string `yaml:"grpc_listen_addr"`
+	RPCListenAddr  string `yaml:"rpc_listen_addr"`
 	HTTPListenAddr string `yaml:"http_listen_addr"`
 }
 
@@ -142,11 +142,11 @@ type SMTPConfig struct {
 
 // AIConfig defines the configuration for the AI analyzer service.
 type AIConfig struct {
-	Provider       string `yaml:"provider"`
-	APIKey         string `yaml:"api_key"`
-	Model          string `yaml:"model"`
-	BaseURL        string `yaml:"base_url"`
-	GRPCListenAddr string `yaml:"grpc_listen_addr"`
+	Provider      string `yaml:"provider"`
+	APIKey        string `yaml:"api_key"`
+	Model         string `yaml:"model"`
+	BaseURL       string `yaml:"base_url"`
+	RPCListenAddr string `yaml:"rpc_listen_addr"`
 }
 
 // Config is the top-level configuration for the application.

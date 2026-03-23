@@ -21,9 +21,9 @@ data:
     {{- /* Hardcode internal service addresses */ -}}
     {{- $_ := set $config "probe" (dict "nats_url" "${NATS_URL}") -}}
     {{- $_ := set $config.alerter.ai_analysis "service_addr" "${ALERTER_AI_SERVICE_ADDR}" -}}
-    {{- $_ := set $config.api "grpc_listen_addr" "${API_GRPC_LISTEN_ADDR}" -}}
+    {{- $_ := set $config.api "rpc_listen_addr" "${API_RPC_LISTEN_ADDR}" -}}
     {{- $_ := set $config.api "http_listen_addr" "${API_HTTP_LISTEN_ADDR}" -}}
-    {{- $_ := set $config.ai "grpc_listen_addr" "${AI_GRPC_LISTEN_ADDR}" -}}
+    {{- $_ := set $config.ai "rpc_listen_addr" "${AI_RPC_LISTEN_ADDR}" -}}
 
     {{- range $i, $writer := $config.aggregator.exact.writers -}}
       {{- if eq $writer.type "clickhouse" -}}

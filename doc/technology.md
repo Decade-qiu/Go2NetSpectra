@@ -10,8 +10,8 @@
 | **数据包解析** | **gopacket** | **Go生态系统的事实标准**。`gopacket` 是一个功能强大且久经考验的库，它提供了对网络协议栈的精细化解码能力。通过其分层设计，我们可以轻松地访问和解析数据包的任意部分，同时它也具备出色的性能，是构建我们解析引擎的基石。 |
 | **配置管理** | **YAML** | **兼具人类可读性与结构化能力**。相比JSON，YAML 格式的配置文件对人类更加友好，更易于阅读和手动编辑。它能清晰地表达复杂的配置结构，使得系统行为的调整无需重新编译代码。 |
 | **消息队列** | **NATS** | **轻量、高性能、易于部署**。在实时处理流水线中，我们选择 NATS 作为核心的消息总线。它提供了优秀的解耦能力和水平扩展潜力，同时其简洁的设计和极低的延迟非常适合用作网络遥测数据的传输通道。|
-| **数据序列化** | **Protobuf** | **高效、兼容、格式严格**。所有在 NATS 中传输的消息都使用 Protobuf 进行序列化。相比 JSON，Protobuf 提供了更高效的编码效率和更严格的格式校验，是构建高性能数据管道的理想选择。|
-| **查询接口** | **gRPC** | **高性能、跨语言的远程调用**。我们选择 gRPC 作为核心的 API 技术。它基于 HTTP/2，使用 Protobuf 进行序列化，性能远超传统的 REST+JSON。其严格的接口定义（IDL）使得 API 的演进和跨语言客户端的生成变得简单可靠。|
+| **数据序列化** | **Thrift** | **高效、格式严格、统一 contract 源**。所有在 NATS 中传输的消息都使用 Thrift 进行序列化。相比 JSON，Thrift 提供了更高效的编码效率和更严格的格式校验，是构建高性能数据管道的理想选择。|
+| **查询接口** | **Thrift RPC** | **高性能、跨语言的远程调用**。我们选择 Thrift RPC 作为核心的 API 技术，同时保留 Grafana 所需的 HTTP/JSON 入口。其统一的 IDL 和二进制协议让 API 演进、客户端生成和 NATS 传输契约保持一致。|
 
 ---
 
@@ -35,7 +35,7 @@
 graph TD
     subgraph "Engine Core"
         direction TB
-        A[Input Channel] -- Protobuf --> B(Manager: Worker Pool)
+        A[Input Channel] -- Thrift --> B(Manager: Worker Pool)
         
         subgraph "Aggregator Group 1: Sketch"
             direction LR
@@ -110,11 +110,11 @@ graph TD
 
 - **多查询器实例 (Multi-Querier)**: `ns-api` 在启动时，不再创建一个单一的 `Querier`。相反，它会检查配置文件中的 `aggregator.types` 列表。如果 `exact` 被启用并且配置了 ClickHouse `Writer`，它就会创建一个 `exactQuerier`。同理，如果 `sketch` 被启用，它会创建 `sketchQuerier`。
 
-- **基于 RPC 的路由**: `QueryServiceServer` 的 gRPC 方法实现现在包含了路由逻辑。当一个请求到达时：
+- **基于 RPC 的路由**: `QueryServiceServer` 的 Thrift RPC 方法实现现在包含了路由逻辑。当一个请求到达时：
   - `AggregateFlows` 或 `TraceFlow` 请求会被固定地路由到 `exactQuerier`，该查询器连接到 `flow_metrics` 表。
   - `QueryHeavyHitters` 请求会被固定地路由到 `sketchQuerier`，该查询器连接到 `heavy_hitters` 表。
 
-这种设计将后端的复杂性对客户端完全屏蔽，客户端只需调用相应的 gRPC 方法，`ns-api` 内部会自动处理与正确数据源的交互。
+这种设计将后端的复杂性对客户端完全屏蔽，客户端只需调用相应的 RPC 方法，`ns-api` 内部会自动处理与正确数据源的交互。
 
 ---
 
@@ -132,7 +132,7 @@ graph TD
 
 - **问题描述**: `ns-api` 服务需要同时服务于对 `exact` 精确数据的查询和对 `sketch` 估算数据的查询，而这两类数据可能存储在不同的数据库甚至不同的表中。
 - **解决方案：多查询器与请求路由**
-    我们在 `ns-api` 中实现了“多查询器”模式。服务在启动时会为每个需要查询的后端（如 `exact` 的 ClickHouse 和 `sketch` 的 ClickHouse）创建独立的 `Querier` 实例。在 gRPC 服务实现中，我们根据被调用的方法（如 `AggregateFlows` vs `QueryHeavyHitters`）将请求分发给对应的 `Querier`，实现了清晰的查询路由。
+    我们在 `ns-api` 中实现了“多查询器”模式。服务在启动时会为每个需要查询的后端（如 `exact` 的 ClickHouse 和 `sketch` 的 ClickHouse）创建独立的 `Querier` 实例。在 RPC 服务实现中，我们根据被调用的方法（如 `AggregateFlows` vs `QueryHeavyHitters`）将请求分发给对应的 `Querier`，实现了清晰的查询路由。
 
 ### 挑战三：多写入器引发的数据竞争
 
@@ -308,15 +308,15 @@ Exact 实现
 
 `ns-ai` 的核心角色是一个**安全的、集中的 AI 网关**。它将与第三方 AI 服务（如 OpenAI, Google AI 等）交互的所有复杂性都封装在内部。
 
-- **安全与封装**: 所有 API 密钥、SDK 依赖和特定的提示工程（Prompt Engineering）逻辑都仅存在于 `ns-ai` 服务中。其他业务模块（如 `Alerter`）无需也无法直接访问这些敏感信息，它们只能通过 gRPC 与 `ns-ai` 通信，大大降低了安全风险。
+- **安全与封装**: 所有 API 密钥、SDK 依赖和特定的提示工程（Prompt Engineering）逻辑都仅存在于 `ns-ai` 服务中。其他业务模块（如 `Alerter`）无需也无法直接访问这些敏感信息，它们只能通过 Thrift RPC 与 `ns-ai` 通信，大大降低了安全风险。
 - **灵活性与解耦**: 通过在配置中提供 `base_url` 选项，`ns-ai` 可以轻松地从一个 AI 提供商切换到另一个兼容 OpenAI API 的提供商，而无需改动任何上游服务的代码。
 
-### 5.2. gRPC 接口设计：双模式服务
+### 5.2. Thrift RPC 接口设计：一元 + 会话分块
 
-`ns-ai` 提供了两种 gRPC 接口，以满足不同的应用场景：
+`ns-ai` 提供了两类 Thrift RPC 接口，以满足不同的应用场景：
 
 1.  **一元 RPC (`AnalyzeTraffic`)**: 用于简单的“请求-响应”模式。`Alerter` 使用此接口发送告警摘要并一次性获取分析结果。
-2.  **流式 RPC (`AnalyzePromptStream`)**: 用于交互式场景。`scripts/ask-ai` 客户端使用此接口，可以实时接收并显示 AI 返回的文本流，提供了优秀的交互体验。
+2.  **会话分块工作流 (`StartPromptAnalysis` / `ReadPromptChunks` / `CancelPromptAnalysis`)**: 用于交互式场景。`scripts/ask-ai` 先创建会话，再轮询读取增量 chunk，从而在保留渐进输出体验的同时摆脱旧的服务端流式依赖。
 
 ### 5.3. 与 Alerter 的联动工作流
 
@@ -338,7 +338,7 @@ sequenceDiagram
     Alerter->>Alerter: 汇总所有告警字符串
     
     opt AI 分析已启用
-        Alerter->>AI_Service: gRPC: AnalyzeTraffic(summary)
+        Alerter->>AI_Service: Thrift RPC: AnalyzeTraffic(summary)
         Note right of AI_Service: 调用 LLM 分析告警摘要
         AI_Service-->>Alerter: 返回 Markdown 格式的分析报告
         Alerter->>Alerter: 将 Markdown 转换为 HTML
@@ -403,16 +403,16 @@ sequenceDiagram
 
 ### 4.2. 实时监控与查询
 
-这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理并写入 ClickHouse，`ns-api` 提供 **gRPC** 查询服务，最终由 Grafana 或其他客户端进行消费。
+这是项目的核心实时流水线，由 `ns-probe` 采集数据，`ns-engine` 处理并写入 ClickHouse，`ns-api` 提供 **Thrift RPC** 查询服务，最终由 Grafana 或其他客户端进行消费。
 
 ```mermaid
 sequenceDiagram
-    participant User as gRPC 客户端
+    participant User as RPC 客户端
     participant Probe as ns-probe
     participant NATS as NATS服务器
     participant Engine as ns-engine
     participant ClickHouse as ClickHouse数据库
-    participant API as ns-api (gRPC + HTTP)
+    participant API as ns-api (Thrift RPC + HTTP)
     participant Grafana as Grafana
 
     Probe->>NATS: Publish(PacketInfo)
@@ -421,11 +421,11 @@ sequenceDiagram
         Engine->>ClickHouse: 批量写入聚合数据
     end
 
-    User->>API: gRPC: AggregateFlows()
-    User->>API: gRPC: QueryHeavyHitters()
+    User->>API: Thrift RPC: AggregateFlows()
+    User->>API: Thrift RPC: QueryHeavyHitters()
     API->>ClickHouse: 执行 SQL 查询
     ClickHouse-->>API: 返回查询结果
-    API-->>User: 返回 Protobuf 响应
+    API-->>User: 返回 Thrift 响应
 
     Grafana->>API: HTTP: /query
     API->>ClickHouse: (内部调用) 执行 SQL 查询
