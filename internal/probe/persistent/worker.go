@@ -1,8 +1,6 @@
 package persistent
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/model"
 	"bufio"
 	"encoding/gob"
 	"fmt"
@@ -11,6 +9,9 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/model"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"

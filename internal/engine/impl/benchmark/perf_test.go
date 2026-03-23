@@ -1,6 +1,12 @@
 package benchmark
 
 import (
+	"fmt"
+	"io"
+	"log"
+	"sync"
+	"testing"
+
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/impl/exact"
 	"Go2NetSpectra/internal/engine/impl/sketch"
@@ -8,11 +14,6 @@ import (
 	"Go2NetSpectra/internal/probe"
 	"Go2NetSpectra/internal/protocol"
 	"Go2NetSpectra/pkg/pcap"
-	"fmt"
-	"io"
-	"log"
-	"sync"
-	"testing"
 
 	"github.com/google/gopacket"
 	gopcap "github.com/google/gopacket/pcap"

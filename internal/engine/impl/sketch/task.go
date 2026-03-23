@@ -1,10 +1,6 @@
 package sketch
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
-	"Go2NetSpectra/internal/factory"
-	"Go2NetSpectra/internal/model"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -13,6 +9,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
+	"Go2NetSpectra/internal/factory"
+	"Go2NetSpectra/internal/model"
 )
 
 // --- Factory Registration ---

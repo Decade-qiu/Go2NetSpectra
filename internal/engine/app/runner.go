@@ -1,11 +1,12 @@
 package app
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/streamaggregator"
 	"context"
 	"fmt"
 	"log"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/engine/streamaggregator"
 )
 
 // RunStreamEngine starts the stream aggregator and blocks until shutdown.

@@ -1,6 +1,11 @@
 package manager
 
 import (
+	"fmt"
+	"log"
+	"sync"
+	"time"
+
 	"Go2NetSpectra/internal/alerter"
 	"Go2NetSpectra/internal/config"
 	_ "Go2NetSpectra/internal/engine/impl/exact"  // Registers exact task aggregator
@@ -8,10 +13,6 @@ import (
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/internal/notification"
-	"fmt"
-	"log"
-	"sync"
-	"time"
 )
 
 // Manager orchestrates a set of aggregation tasks and their writers.

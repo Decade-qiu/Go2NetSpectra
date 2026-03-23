@@ -1,12 +1,13 @@
 package streamaggregator
 
 import (
-	"Go2NetSpectra/internal/model"
-	"Go2NetSpectra/internal/probe"
 	"encoding/hex"
 	"net"
 	"testing"
 	"time"
+
+	"Go2NetSpectra/internal/model"
+	"Go2NetSpectra/internal/probe"
 
 	"github.com/nats-io/nats.go"
 )

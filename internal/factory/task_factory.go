@@ -1,10 +1,11 @@
 package factory
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/model"
 	"fmt"
 	"log"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/model"
 )
 
 // TaskGroup is a logical grouping of tasks and their associated writers.

@@ -1,10 +1,6 @@
 package main
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/model"
-	"Go2NetSpectra/internal/probe"
-	"Go2NetSpectra/internal/protocol"
 	"context"
 	"flag"
 	"fmt"
@@ -12,6 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/model"
+	"Go2NetSpectra/internal/probe"
+	"Go2NetSpectra/internal/protocol"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"

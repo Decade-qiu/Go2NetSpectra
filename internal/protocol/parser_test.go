@@ -1,8 +1,9 @@
 package protocol
 
 import (
-	"Go2NetSpectra/internal/model"
 	"testing"
+
+	"Go2NetSpectra/internal/model"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"

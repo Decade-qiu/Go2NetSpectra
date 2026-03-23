@@ -1,13 +1,14 @@
 package sketch
 
 import (
-	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
-	"Go2NetSpectra/internal/model"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
+	"Go2NetSpectra/internal/model"
 )
 
 // TextWriter handles writing heavy hitters to a text file.

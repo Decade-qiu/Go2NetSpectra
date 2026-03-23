@@ -1,11 +1,12 @@
 package notification
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/model"
 	"fmt"
 	"net/smtp"
 	"strings"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/model"
 )
 
 // EmailNotifier implements the Notifier interface for sending emails.

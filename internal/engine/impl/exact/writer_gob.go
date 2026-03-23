@@ -1,14 +1,15 @@
 package exact
 
 import (
-	"Go2NetSpectra/internal/engine/impl/exact/statistic"
-	"Go2NetSpectra/internal/model"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"Go2NetSpectra/internal/engine/impl/exact/statistic"
+	"Go2NetSpectra/internal/model"
 )
 
 func init() {

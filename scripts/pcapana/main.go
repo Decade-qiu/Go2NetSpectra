@@ -1,10 +1,11 @@
 package main
 
 import (
-	"Go2NetSpectra/internal/protocol"
 	"fmt"
 	"log"
 	"os"
+
+	"Go2NetSpectra/internal/protocol"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"

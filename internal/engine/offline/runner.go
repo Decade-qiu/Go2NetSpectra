@@ -3,11 +3,12 @@
 package offline
 
 import (
+	"fmt"
+	"log"
+
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/manager"
 	"Go2NetSpectra/pkg/pcap"
-	"fmt"
-	"log"
 )
 
 // RunAnalyzer runs the offline analyzer against a pcap file.

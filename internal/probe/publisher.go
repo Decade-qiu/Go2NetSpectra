@@ -1,11 +1,12 @@
 package probe
 
 import (
+	"log"
+	"sync"
+
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/internal/probe/persistent"
-	"log"
-	"sync"
 
 	"github.com/google/gopacket"
 	"github.com/nats-io/nats.go"

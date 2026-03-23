@@ -1,10 +1,11 @@
 package factory_test
 
 import (
+	"testing"
+
 	"Go2NetSpectra/internal/config"
 	_ "Go2NetSpectra/internal/engine/manager"
 	"Go2NetSpectra/internal/factory"
-	"testing"
 )
 
 func TestCreateUsesRegisteredAggregators(t *testing.T) {

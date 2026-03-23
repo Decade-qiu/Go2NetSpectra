@@ -1,10 +1,6 @@
 package sketch
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
-	"Go2NetSpectra/internal/model"
-	"Go2NetSpectra/pkg/pcap"
 	"bufio"
 	"fmt"
 	"log"
@@ -12,6 +8,11 @@ import (
 	"os"
 	"sync"
 	"testing"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
+	"Go2NetSpectra/internal/model"
+	"Go2NetSpectra/pkg/pcap"
 )
 
 func TestSuperSpread(t *testing.T) {

@@ -1,9 +1,10 @@
 package pcap
 
 import (
+	"log"
+
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/internal/protocol"
-	"log"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"

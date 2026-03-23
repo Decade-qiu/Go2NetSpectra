@@ -1,10 +1,6 @@
 package exact
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/impl/exact/statistic"
-	"Go2NetSpectra/internal/factory"
-	"Go2NetSpectra/internal/model"
 	"fmt"
 	"hash/maphash"
 	"log"
@@ -13,6 +9,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/engine/impl/exact/statistic"
+	"Go2NetSpectra/internal/factory"
+	"Go2NetSpectra/internal/model"
 )
 
 // --- Factory Registration ---

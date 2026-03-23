@@ -1,9 +1,10 @@
 package probe
 
 import (
+	"log"
+
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/model"
-	"log"
 
 	"github.com/nats-io/nats.go"
 )

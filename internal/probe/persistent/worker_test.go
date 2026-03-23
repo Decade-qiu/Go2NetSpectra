@@ -1,13 +1,14 @@
 package persistent
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/model"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/model"
 )
 
 func TestWorkerStopFlushesQueuedPackets(t *testing.T) {

@@ -1,14 +1,15 @@
 package sketch
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
-	"Go2NetSpectra/internal/model"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
 	"time"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
+	"Go2NetSpectra/internal/model"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"

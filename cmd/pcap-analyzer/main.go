@@ -1,11 +1,12 @@
 package main
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/offline"
 	"fmt"
 	"log"
 	"os"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/engine/offline"
 )
 
 func main() {

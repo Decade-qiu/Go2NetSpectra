@@ -1,13 +1,14 @@
 package main
 
 import (
-	"Go2NetSpectra/internal/ai"
-	"Go2NetSpectra/internal/config"
 	"context"
 	"flag"
 	"log"
 	"os/signal"
 	"syscall"
+
+	"Go2NetSpectra/internal/ai"
+	"Go2NetSpectra/internal/config"
 )
 
 func main() {

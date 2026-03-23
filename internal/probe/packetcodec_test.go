@@ -1,12 +1,13 @@
 package probe
 
 import (
-	thriftv1 "Go2NetSpectra/api/gen/thrift/v1"
-	"Go2NetSpectra/internal/model"
 	"encoding/hex"
 	"net"
 	"testing"
 	"time"
+
+	thriftv1 "Go2NetSpectra/api/gen/thrift/v1"
+	"Go2NetSpectra/internal/model"
 )
 
 func TestPacketInfoRoundTrip(t *testing.T) {

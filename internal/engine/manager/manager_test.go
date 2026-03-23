@@ -1,13 +1,14 @@
 package manager
 
 import (
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/factory"
-	"Go2NetSpectra/internal/model"
 	"net"
 	"sync"
 	"testing"
 	"time"
+
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/factory"
+	"Go2NetSpectra/internal/model"
 )
 
 type stubTask struct {

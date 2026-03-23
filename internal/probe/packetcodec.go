@@ -1,13 +1,14 @@
 package probe
 
 import (
-	"Go2NetSpectra/internal/model"
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"time"
+
+	"Go2NetSpectra/internal/model"
 
 	v1 "Go2NetSpectra/api/gen/thrift/v1"
 
