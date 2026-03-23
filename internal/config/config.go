@@ -110,8 +110,8 @@ type APIConfig struct {
 type AlerterRule struct {
 	Name      string  `yaml:"name"`
 	TaskName  string  `yaml:"task_name"`
-	Metric    string  `yaml:"metric"`    // e.g., "heavy_hitter_count", "super_spreader_spread", "total_bytes"
-	Operator  string  `yaml:"operator"`  // e.g., ">", "<", "="
+	Metric    string  `yaml:"metric"`   // e.g., "heavy_hitter_count", "super_spreader_spread", "total_bytes"
+	Operator  string  `yaml:"operator"` // e.g., ">", "<", "="
 	Threshold float64 `yaml:"threshold"`
 }
 
@@ -139,17 +139,16 @@ type SMTPConfig struct {
 	To       string `yaml:"to"` // Comma-separated list of recipients
 }
 
-// Config is the top-level configuration struct for the entire application.
-
 // AIConfig defines the configuration for the AI analyzer service.
 type AIConfig struct {
-	Provider      string `yaml:"provider"`
-	APIKey        string `yaml:"api_key"`
-	Model         string `yaml:"model"`
-	BaseURL       string `yaml:"base_url"`
-	GRPCLisenAddr string `yaml:"grpc_listen_addr"`
+	Provider       string `yaml:"provider"`
+	APIKey         string `yaml:"api_key"`
+	Model          string `yaml:"model"`
+	BaseURL        string `yaml:"base_url"`
+	GRPCListenAddr string `yaml:"grpc_listen_addr"`
 }
 
+// Config is the top-level configuration for the application.
 type Config struct {
 	Aggregator AggregatorConfig `yaml:"aggregator"`
 	Probe      ProbeConfig      `yaml:"probe"`
@@ -176,7 +175,7 @@ func LoadConfig(filePath string) (*Config, error) {
 	var cfg Config
 	err = yaml.Unmarshal(expandedData, &cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config YAML: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal config yaml: %w", err)
 	}
 
 	return &cfg, nil

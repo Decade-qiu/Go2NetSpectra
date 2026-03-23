@@ -1,10 +1,11 @@
 package streamaggregator
 
 import (
+	"log"
+
 	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
 	"Go2NetSpectra/internal/engine/manager"
-	"log"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -16,7 +17,7 @@ type StreamAggregator struct {
 	sub          *nats.Subscription
 	manager      *manager.Manager
 	inputChannel chan<- *v1.PacketInfo
-	natsURL   	string
+	natsURL      string
 	natsSubject  string
 }
 
@@ -37,11 +38,11 @@ func NewStreamAggregator(cfg *config.Config) (*StreamAggregator, error) {
 }
 
 // Start connects to NATS, starts the underlying manager, and begins processing messages.
-func (sa *StreamAggregator) Start() {
+func (sa *StreamAggregator) Start() error {
 	log.Println("StreamAggregator starting for nats: ", sa.natsURL)
 	nc, err := nats.Connect(sa.natsURL)
 	if err != nil {
-		log.Fatalf("StreamAggregator failed to connect to NATS: %v", err)
+		return err
 	}
 	sa.nc = nc
 
@@ -50,19 +51,28 @@ func (sa *StreamAggregator) Start() {
 
 	sa.sub, err = sa.nc.Subscribe(sa.natsSubject, sa.handlePacket)
 	if err != nil {
-		log.Fatalf("StreamAggregator failed to subscribe: %v", err)
+		sa.nc.Close()
+		sa.nc = nil
+		sa.manager.Stop()
+		return err
 	}
 	log.Printf("StreamAggregator subscribed to '%s'", sa.natsSubject)
+	return nil
 }
 
 // Stop gracefully shuts down the aggregator.
 func (sa *StreamAggregator) Stop() {
 	log.Println("StreamAggregator stopping...")
 	if sa.sub != nil {
-		sa.sub.Unsubscribe()
+		if err := sa.sub.Unsubscribe(); err != nil {
+			log.Printf("StreamAggregator failed to unsubscribe: %v", err)
+		}
 	}
 	if sa.nc != nil {
-		sa.nc.Close()
+		if err := sa.nc.Drain(); err != nil {
+			log.Printf("StreamAggregator failed to drain NATS connection: %v", err)
+			sa.nc.Close()
+		}
 	}
 	// Stop the underlying manager, which will close the input channel
 	// and wait for workers to finish before taking a final snapshot.

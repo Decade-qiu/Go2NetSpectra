@@ -117,7 +117,7 @@ func TestCountMin(t *testing.T) {
 		}
 
 		_, err := fmt.Fprintf(writer, "%s %d %d %d %d\n",
-	key, actualCount, estimatedCount, actualSize, estimatedSize)
+			key, actualCount, estimatedCount, actualSize, estimatedSize)
 		if err != nil {
 			log.Fatalf("Failed to write: %v", err)
 		}
@@ -174,6 +174,30 @@ func TestCountMin(t *testing.T) {
 	log.Printf("[Size-HH] TP=%d FP=%d FN=%d", tpS, fpS, fnS)
 	log.Printf("[Size-HH] MRE=%.4f Precision=%.4f Recall=%.4f F1=%.4f",
 		sizeMRE, sizePrec, sizeRec, sizeF1)
+}
+
+func TestCountMinFixtureProducesHeavyHitterSnapshot(t *testing.T) {
+	cfg := config.SketchTaskDef{
+		Name:            "fixture-heavy-hitter",
+		SktType:         0,
+		FlowFields:      []string{"SrcIP"},
+		ElementFields:   []string{"DstIP"},
+		Width:           1 << 8,
+		Depth:           2,
+		SizeThereshold:  1,
+		CountThereshold: 1,
+	}
+
+	task := New(cfg)
+	feedFixturePackets(t, "../../../../test/data/test.pcap", task)
+
+	snapshot, ok := task.Snapshot().(statistic.HeavyRecord)
+	if !ok {
+		t.Fatalf("Snapshot() type = %T, want statistic.HeavyRecord", task.Snapshot())
+	}
+	if len(snapshot.Count) == 0 && len(snapshot.Size) == 0 {
+		t.Fatal("Snapshot() returned no heavy hitters for fixture input")
+	}
 }
 
 func evaluateHeavyHitters(detected map[string]uint32, truth map[string]int) (mre, precision, recall, f1 float64, tp, fp, fn int) {

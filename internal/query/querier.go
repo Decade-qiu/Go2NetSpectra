@@ -1,13 +1,15 @@
 package query
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
-	"Go2NetSpectra/internal/config"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
+
+	v1 "Go2NetSpectra/api/gen/v1"
+	"Go2NetSpectra/internal/config"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -25,6 +27,14 @@ type clickhouseQuerier struct {
 	conn clickhouse.Conn
 }
 
+var traceFlowKeys = map[string]struct{}{
+	"DstIP":    {},
+	"DstPort":  {},
+	"Protocol": {},
+	"SrcIP":    {},
+	"SrcPort":  {},
+}
+
 // NewClickHouseQuerier creates a new querier for ClickHouse.
 func NewClickHouseQuerier(cfg config.ClickHouseConfig) (Querier, error) {
 	conn, err := connect(cfg)
@@ -38,30 +48,51 @@ func connect(cfg config.ClickHouseConfig) (clickhouse.Conn, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
 	opts := &clickhouse.Options{
-        Addr: []string{addr},
-        Auth: clickhouse.Auth{
-            Database: cfg.Database,
-            Username: cfg.Username,
-            Password: cfg.Password,
-        },
-    }
-    if cfg.Cloud {
-        opts.Protocol = clickhouse.HTTP
-        opts.TLS = &tls.Config{
-            InsecureSkipVerify: true,
-        }
-    }
-    conn, err := clickhouse.Open(opts)
+		Addr: []string{addr},
+		Auth: clickhouse.Auth{
+			Database: cfg.Database,
+			Username: cfg.Username,
+			Password: cfg.Password,
+		},
+	}
+	if cfg.Cloud {
+		opts.Protocol = clickhouse.HTTP
+		opts.TLS = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+	conn, err := clickhouse.Open(opts)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if err := conn.Ping(context.Background()); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := conn.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping clickhouse: %w", err)
 	}
 
 	return conn, nil
+}
+
+func appendTraceFlowFilters(whereClauses []string, args []any, flowKeys map[string]string) ([]string, []any, error) {
+	sortedKeys := make([]string, 0, len(flowKeys))
+	for key := range flowKeys {
+		if _, ok := traceFlowKeys[key]; !ok {
+			return nil, nil, fmt.Errorf("unsupported flow key: %s", key)
+		}
+		sortedKeys = append(sortedKeys, key)
+	}
+	slices.Sort(sortedKeys)
+
+	for _, key := range sortedKeys {
+		whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", key))
+		args = append(args, flowKeys[key])
+	}
+
+	return whereClauses, args, nil
 }
 
 // QueryHeavyHitters builds and executes a dynamic heavy hitters query.
@@ -76,8 +107,8 @@ func (q *clickhouseQuerier) QueryHeavyHitters(ctx context.Context, req *v1.Heavy
 			FROM heavy_hitters
 	`)
 
-	var whereClauses []string
-	args := []interface{}{}
+	whereClauses := make([]string, 0, 3)
+	args := make([]any, 0, 4)
 
 	whereClauses = append(whereClauses, "TaskName = ?")
 	args = append(args, req.TaskName)
@@ -135,8 +166,8 @@ func (q *clickhouseQuerier) AggregateFlows(ctx context.Context, req *v1.Aggregat
 			FROM flow_metrics
 	`)
 
-	var whereClauses []string
-	args := []interface{}{}
+	whereClauses := make([]string, 0, 2)
+	args := make([]any, 0, 2)
 
 	if req.EndTime != nil {
 		whereClauses = append(whereClauses, "Timestamp <= ?")
@@ -187,21 +218,15 @@ func (q *clickhouseQuerier) TraceFlow(ctx context.Context, req *v1.TraceFlowRequ
 		FROM flow_metrics
 	`)
 
-	var whereClauses []string
-	args := []interface{}{}
+	whereClauses := make([]string, 0, len(req.FlowKeys)+2)
+	args := make([]any, 0, len(req.FlowKeys)+2)
 
 	whereClauses = append(whereClauses, "TaskName = ?")
 	args = append(args, req.TaskName)
 
-	for key, value := range req.FlowKeys {
-		// Basic validation to prevent arbitrary column injection
-		switch key {
-		case "SrcIP", "DstIP", "SrcPort", "DstPort", "Protocol":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", key))
-			args = append(args, value)
-		default:
-			return nil, fmt.Errorf("unsupported flow key: %s, only SrcIP, DstIP, SrcPort, DstPort, Protocol are allowed", key)
-		}
+	whereClauses, args, err := appendTraceFlowFilters(whereClauses, args, req.FlowKeys)
+	if err != nil {
+		return nil, err
 	}
 
 	if req.EndTime != nil {

@@ -1,11 +1,12 @@
 package ai
 
 import (
-	"Go2NetSpectra/internal/config"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+
+	"Go2NetSpectra/internal/config"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -18,8 +19,11 @@ type CommonAnalyzer struct {
 
 // NewCommonAnalyzer creates a new instance of CommonAnalyzer.
 func NewCommonAnalyzer(cfg *config.AIConfig) (*CommonAnalyzer, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("ai config is nil")
+	}
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("AI API key is not configured")
+		return nil, fmt.Errorf("ai api key is not configured")
 	}
 	clientConfig := openai.DefaultConfig(cfg.APIKey)
 	if cfg.BaseURL != "" {
@@ -52,16 +56,14 @@ func (a *CommonAnalyzer) AnalyzeStream(ctx context.Context, prompt string, sendC
 	for {
 		response, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
-			return nil // Stream finished successfully
+			return nil
 		}
 		if err != nil {
 			return fmt.Errorf("stream error: %w", err)
 		}
 
-		// Get the text chunk from the stream response and send it
 		chunk := response.Choices[0].Delta.Content
 		if err := sendChunk(chunk); err != nil {
-			// This error might occur if the client disconnects
 			return fmt.Errorf("failed to send chunk to client: %w", err)
 		}
 	}

@@ -26,22 +26,41 @@ func BobHash(data []byte) uint32 {
 	}
 
 	mix := func() {
-		a -= c; a ^= rot(c, 4); c += b
-		b -= a; b ^= rot(a, 6); a += c
-		c -= b; c ^= rot(b, 8); b += a
-		a -= c; a ^= rot(c, 16); c += b
-		b -= a; b ^= rot(a, 19); a += c
-		c -= b; c ^= rot(b, 4); b += a
+		a -= c
+		a ^= rot(c, 4)
+		c += b
+		b -= a
+		b ^= rot(a, 6)
+		a += c
+		c -= b
+		c ^= rot(b, 8)
+		b += a
+		a -= c
+		a ^= rot(c, 16)
+		c += b
+		b -= a
+		b ^= rot(a, 19)
+		a += c
+		c -= b
+		c ^= rot(b, 4)
+		b += a
 	}
 
 	final := func() {
-		c ^= b; c -= rot(b, 14)
-		a ^= c; a -= rot(c, 11)
-		b ^= a; b -= rot(a, 25)
-		c ^= b; c -= rot(b, 16)
-		a ^= c; a -= rot(c, 4)
-		b ^= a; b -= rot(a, 14)
-		c ^= b; c -= rot(b, 24)
+		c ^= b
+		c -= rot(b, 14)
+		a ^= c
+		a -= rot(c, 11)
+		b ^= a
+		b -= rot(a, 25)
+		c ^= b
+		c -= rot(b, 16)
+		a ^= c
+		a -= rot(c, 4)
+		b ^= a
+		b -= rot(a, 14)
+		c ^= b
+		c -= rot(b, 24)
 	}
 
 	i := 0
@@ -193,11 +212,13 @@ func xxHash32(data []byte, seed uint32) uint32 {
 // Benchmark
 //////////////////////
 
-
 var (
-	data1MB  []byte
-	data10MB []byte
-	data100MB []byte
+	data1MB      []byte
+	data10MB     []byte
+	data100MB    []byte
+	flowKey16B   []byte
+	flowTuple37B []byte
+	flowPair74B  []byte
 )
 
 func init() {
@@ -205,9 +226,15 @@ func init() {
 	data1MB = make([]byte, 1024*1024)
 	data10MB = make([]byte, 10*1024*1024)
 	data100MB = make([]byte, 100*1024*1024)
+	flowKey16B = make([]byte, 16)
+	flowTuple37B = make([]byte, 37)
+	flowPair74B = make([]byte, 74)
 	rand.Read(data1MB)
 	rand.Read(data10MB)
 	rand.Read(data100MB)
+	rand.Read(flowKey16B)
+	rand.Read(flowTuple37B)
+	rand.Read(flowPair74B)
 }
 
 //////////////////////
@@ -289,5 +316,24 @@ func BenchmarkXXHash32100MB(b *testing.B) {
 func BenchmarkCRC32100MB(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = crc32.ChecksumIEEE(data100MB)
+	}
+}
+
+func BenchmarkMurmurHash3RepresentativeFlowInputs(b *testing.B) {
+	benchmarks := []struct {
+		name string
+		data []byte
+	}{
+		{name: "flow_key_16b", data: flowKey16B},
+		{name: "flow_tuple_37b", data: flowTuple37B},
+		{name: "merged_flow_elem_74b", data: flowPair74B},
+	}
+
+	for _, benchmark := range benchmarks {
+		b.Run(benchmark.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = MurmurHash3(benchmark.data, 0)
+			}
+		})
 	}
 }

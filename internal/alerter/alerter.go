@@ -1,15 +1,16 @@
 package alerter
 
 import (
-	v1 "Go2NetSpectra/api/gen/v1"
-	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/model"
 	"context"
 	"fmt"
 	"log"
 	"strings"
-	sync "sync"
-	time "time"
+	"sync"
+	"time"
+
+	v1 "Go2NetSpectra/api/gen/v1"
+	"Go2NetSpectra/internal/config"
+	"Go2NetSpectra/internal/model"
 
 	"github.com/gomarkdown/markdown"
 	"google.golang.org/grpc"
@@ -25,10 +26,12 @@ type Alerter struct {
 	checkInterval time.Duration
 	stopChan      chan struct{}
 	wg            sync.WaitGroup
+	stopOnce      sync.Once
 
 	// AI analysis components
 	aiEnabled bool
 	aiClient  v1.AIServiceClient
+	aiConn    *grpc.ClientConn
 }
 
 // NewAlerter creates a new Alerter instance.
@@ -53,6 +56,7 @@ func NewAlerter(cfg *config.AlerterConfig, tasks []model.Task, notifier model.No
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to AI service: %w", err)
 		}
+		a.aiConn = conn
 		a.aiClient = v1.NewAIServiceClient(conn)
 	}
 
@@ -61,30 +65,38 @@ func NewAlerter(cfg *config.AlerterConfig, tasks []model.Task, notifier model.No
 
 // Start begins the periodic evaluation of alert rules.
 func (a *Alerter) Start() {
-	log.Println("Alerter started")
-	
 	a.wg.Add(1)
-	defer a.wg.Done()
+	go func() {
+		defer a.wg.Done()
+		log.Println("Alerter started.")
 
-	ticker := time.NewTicker(a.checkInterval)
-	defer ticker.Stop()
+		ticker := time.NewTicker(a.checkInterval)
+		defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			a.evaluateAllTasks()
-		case <-a.stopChan:
-			return
+		for {
+			select {
+			case <-ticker.C:
+				a.evaluateAllTasks()
+			case <-a.stopChan:
+				return
+			}
 		}
-	}
+	}()
 }
 
 // Stop gracefully stops the alerter's evaluation loop.
 func (a *Alerter) Stop() {
 	log.Println("Stopping Alerter...")
-	close(a.stopChan)
+	a.stopOnce.Do(func() {
+		close(a.stopChan)
+	})
 	a.wg.Wait()
 	a.evaluateAllTasks()
+	if a.aiConn != nil {
+		if err := a.aiConn.Close(); err != nil {
+			log.Printf("Failed to close AI service connection: %v", err)
+		}
+	}
 }
 
 // evaluateAllTasks orchestrates the concurrent evaluation of all tasks against the rules.
@@ -162,12 +174,12 @@ func (a *Alerter) getAIAnalysis(alertContent string) (string, error) {
 	}
 
 	log.Println("Requesting AI analysis for alert summary...")
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second) // 30-second timeout for AI call
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	resp, err := a.aiClient.AnalyzeTraffic(ctx, &v1.AnalyzeTrafficRequest{TextInput: alertContent})
 	if err != nil {
-		return "", fmt.Errorf("AI service call failed: %w", err)
+		return "", fmt.Errorf("ai service call failed: %w", err)
 	}
 
 	return resp.GetTextOutput(), nil

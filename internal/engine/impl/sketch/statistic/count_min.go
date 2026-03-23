@@ -93,60 +93,60 @@ func (t *CountMin) Insert(flow, elem []byte, size uint32) {
 
 		// Update Size
 		for {
-            bsize := &bucket.Size
-            currentS := atomic.LoadUint32(&bsize.S)
-            if currentS == 0 {
-                if atomic.CompareAndSwapUint32(&bsize.S, 0, size) {
-                    copy(bsize.FP, flow)
-                    break
-                }
-            } else {
-                if bytes.Equal(bsize.FP, flow) {
-                    newS := currentS + size
-                    if atomic.CompareAndSwapUint32(&bsize.S, currentS, newS) {
-                        break
-                    }
-                } else {
-                    if size > currentS {
-                        if atomic.CompareAndSwapUint32(&bsize.S, currentS, size) {
-                            copy(bsize.FP, flow)
-                            break
-                        }
-                    } else {
-                        newS := currentS - size
-                        if atomic.CompareAndSwapUint32(&bsize.S, currentS, newS) {
-                            break
-                        }
-                    }
-                }
-            }
-        }
+			bsize := &bucket.Size
+			currentS := atomic.LoadUint32(&bsize.S)
+			if currentS == 0 {
+				if atomic.CompareAndSwapUint32(&bsize.S, 0, size) {
+					copy(bsize.FP, flow)
+					break
+				}
+			} else {
+				if bytes.Equal(bsize.FP, flow) {
+					newS := currentS + size
+					if atomic.CompareAndSwapUint32(&bsize.S, currentS, newS) {
+						break
+					}
+				} else {
+					if size > currentS {
+						if atomic.CompareAndSwapUint32(&bsize.S, currentS, size) {
+							copy(bsize.FP, flow)
+							break
+						}
+					} else {
+						newS := currentS - size
+						if atomic.CompareAndSwapUint32(&bsize.S, currentS, newS) {
+							break
+						}
+					}
+				}
+			}
+		}
 		// Update Count
-        for {
-            bcount := &bucket.Count
-            currentC := atomic.LoadUint32(&bcount.C)
-            if currentC == 0 {
-                if atomic.CompareAndSwapUint32(&bcount.C, 0, 1) {
-                    copy(bcount.FP, flow)
-                    break
-                }
-            } else {
-                if bytes.Equal(bcount.FP, flow) {
-                    newC := currentC + 1
-                    if atomic.CompareAndSwapUint32(&bcount.C, currentC, newC) {
-                        break
-                    }
-                } else {
-                    newC := currentC - 1
-                    if atomic.CompareAndSwapUint32(&bcount.C, currentC, newC) {
-                        if newC == 0 {
-                            copy(bcount.FP, flow)
-                        }
-                        break
-                    }
-                }
-            }
-        }
+		for {
+			bcount := &bucket.Count
+			currentC := atomic.LoadUint32(&bcount.C)
+			if currentC == 0 {
+				if atomic.CompareAndSwapUint32(&bcount.C, 0, 1) {
+					copy(bcount.FP, flow)
+					break
+				}
+			} else {
+				if bytes.Equal(bcount.FP, flow) {
+					newC := currentC + 1
+					if atomic.CompareAndSwapUint32(&bcount.C, currentC, newC) {
+						break
+					}
+				} else {
+					newC := currentC - 1
+					if atomic.CompareAndSwapUint32(&bcount.C, currentC, newC) {
+						if newC == 0 {
+							copy(bcount.FP, flow)
+						}
+						break
+					}
+				}
+			}
+		}
 	}
 
 }

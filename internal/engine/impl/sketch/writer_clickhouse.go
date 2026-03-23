@@ -55,20 +55,20 @@ func connect(cfg config.ClickHouseConfig) (driver.Conn, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
 	opts := &clickhouse.Options{
-        Addr: []string{addr},
-        Auth: clickhouse.Auth{
-            Database: cfg.Database,
-            Username: cfg.Username,
-            Password: cfg.Password,
-        },
-    }
-    if cfg.Cloud {
-        opts.Protocol = clickhouse.HTTP
-        opts.TLS = &tls.Config{
-            InsecureSkipVerify: true,
-        }
-    }
-    conn, err := clickhouse.Open(opts)
+		Addr: []string{addr},
+		Auth: clickhouse.Auth{
+			Database: cfg.Database,
+			Username: cfg.Username,
+			Password: cfg.Password,
+		},
+	}
+	if cfg.Cloud {
+		opts.Protocol = clickhouse.HTTP
+		opts.TLS = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+	conn, err := clickhouse.Open(opts)
 
 	if err != nil {
 		return nil, err
@@ -87,14 +87,17 @@ func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fi
 		return fmt.Errorf("invalid payload type for ClickHouse Writer: expected statistic.HeavyRecord, got %T", payload)
 	}
 
+	total := len(heavyHitters.Size) + len(heavyHitters.Count)
+	if total == 0 {
+		return nil
+	}
+
 	batch, err := w.conn.PrepareBatch(context.Background(), "INSERT INTO heavy_hitters")
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
 
 	snapshotTime, _ := time.Parse("2006-01-02_15-04-05", timestamp)
-
-	total := 0
 
 	if heavyHitters.Size != nil {
 		// size
@@ -103,8 +106,6 @@ func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fi
 			err = batch.Append(snapshotTime, name, flow, hitter.Size, 1)
 			if err != nil {
 				return fmt.Errorf("failed to append heavy hitter to batch: %w", err)
-			} else {
-				total++
 			}
 		}
 		// count
@@ -113,8 +114,6 @@ func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fi
 			err = batch.Append(snapshotTime, name, flow, hitter.Count, 0)
 			if err != nil {
 				return fmt.Errorf("failed to append heavy hitter to batch: %w", err)
-			} else {
-				total++
 			}
 		}
 	} else {
@@ -124,8 +123,6 @@ func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fi
 			err = batch.Append(snapshotTime, name, flow, hitter.Count, 2)
 			if err != nil {
 				return fmt.Errorf("failed to append heavy hitter to batch: %w", err)
-			} else {
-				total++
 			}
 		}
 	}

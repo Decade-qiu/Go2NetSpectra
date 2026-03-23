@@ -26,6 +26,7 @@
 
 - `MUST`：所有 Go 源文件都符合 `gofmt` 输出。
 - `SHOULD`：有 import 变化时使用 `goimports`，避免手排 import。
+- `MUST`：Go 文件名默认使用全小写；多词文件名使用 snake_case，如 `count_min.go`、`querier_test.go`。
 - `MUST`：不要为了“视觉对齐”手工调整空格，让 `gofmt` 决定布局。
 - `MUST`：Go 没有固定行宽限制，不要为了凑 80 列或 100 列做生硬换行。
 - `SHOULD`：如果某一行过长，优先缩短命名、提取变量或重构表达式，而不是机械折行。
@@ -127,6 +128,12 @@
 - `SHOULD`：常量命名表达“角色”而不是“值”，如 `MaxPacketSize` 优于 `Twelve`。
 - `MUST`：可复用错误变量命名为 `errXxx` 或 `ErrXxx`。
 
+### 4.9 file names
+
+- `MUST`：Go 文件名默认使用全小写。
+- `SHOULD`：多词文件名使用 snake_case，而不是 `MixedCaps` 或连字符。
+- `SHOULD`：测试文件命名与被测文件保持可追踪关系，如 `querier.go` 对应 `querier_test.go`。
+
 ## 5. 注释与文档
 
 ### 5.1 总体要求
@@ -212,6 +219,11 @@
 - `SHOULD`：像 `string`、`time.Time`、小 struct 这类天然值语义对象，优先直接传值。
 - `SHOULD`：如果函数需要修改输入、或输入持有锁/大数组/大 struct，优先传指针。
 
+### 6.8 map iteration
+
+- `MUST`：涉及 SQL 构造、序列化输出、签名计算或测试断言时，不要依赖 map 的遍历顺序。
+- `SHOULD`：如果输出顺序会影响日志、查询文本、错误复现或测试稳定性，先取 key 列表再排序。
+
 ## 7. 错误处理
 
 ### 7.1 基本原则
@@ -237,6 +249,12 @@
   - `Error() string`
   - `Unwrap() error`
   - 持有底层 `Err error` 字段
+
+## 8. 生命周期与并发边界
+
+- `SHOULD`：`Start`/`Stop` 一类生命周期 API 优先由实现方自行启动 goroutine，并让调用方通过返回值和 `Stop` 感知失败与退出。
+- `MUST`：库代码不要用 `log.Fatal`/`log.Fatalf` 处理常规错误；把错误返回给调用方，由 `main` 包或顶层 runner 决定如何退出。
+- `SHOULD`：停止流程应尽量幂等；如果组件支持 `Stop`，重复调用不应引发 panic。
 
 ### 7.4 wrap / unwrap / 判定
 

@@ -10,15 +10,25 @@ import (
 
 // ParsePacket uses gopacket to decode a raw packet and extract key information.
 func ParsePacket(packet gopacket.Packet) (*model.PacketInfo, error) {
-	// packet := gopacket.NewPacket(data, linkType, gopacket.Default)
+	info := &model.PacketInfo{}
+	if err := ParsePacketInto(packet, info); err != nil {
+		return nil, err
+	}
 
-	info := &model.PacketInfo{
-        Timestamp: packet.Metadata().Timestamp, 
-        Length:    packet.Metadata().Length,
-    }
+	return info, nil
+}
+
+// ParsePacketInto decodes a raw packet into a caller-provided PacketInfo.
+func ParsePacketInto(packet gopacket.Packet, info *model.PacketInfo) error {
+	if info == nil {
+		return fmt.Errorf("nil packet info")
+	}
+
+	*info = model.PacketInfo{}
 
 	if meta := packet.Metadata(); meta != nil {
 		info.Timestamp = meta.Timestamp
+		info.Length = meta.Length
 	}
 
 	var fiveTuple model.FiveTuple
@@ -35,7 +45,7 @@ func ParsePacket(packet gopacket.Packet) (*model.PacketInfo, error) {
 		fiveTuple.DstIP = ip.DstIP
 		fiveTuple.Protocol = uint8(ip.NextHeader)
 	} else {
-		return nil, fmt.Errorf("not an IP packet")
+		return fmt.Errorf("not an IP packet")
 	}
 
 	// Get transport layer
@@ -52,5 +62,5 @@ func ParsePacket(packet gopacket.Packet) (*model.PacketInfo, error) {
 
 	info.FiveTuple = fiveTuple
 
-	return info, nil
+	return nil
 }

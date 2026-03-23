@@ -23,21 +23,21 @@ func main() {
 	}
 	gobFile := os.Args[1]
 
-    file, err := os.Open(gobFile)
-    if err != nil {
-        log.Fatalf("Unable to open file: %v", err)
-    }
-    defer file.Close()
+	file, err := os.Open(gobFile)
+	if err != nil {
+		log.Fatalf("Unable to open file: %v", err)
+	}
+	defer file.Close()
 
-    decoder := gob.NewDecoder(file)
+	decoder := gob.NewDecoder(file)
 
-    var mp map[string]Flow
-    
-    err = decoder.Decode(&mp)
-    if err != nil {
-        log.Fatalf("Failed to decode gob data: %v", err)
-    }
+	var mp map[string]Flow
 
-    fmt.Println("Decoded Flows:")
-    fmt.Printf("%+v\n", mp)
+	err = decoder.Decode(&mp)
+	if err != nil {
+		log.Fatalf("Failed to decode gob data: %v", err)
+	}
+
+	fmt.Println("Decoded Flows:")
+	fmt.Printf("%+v\n", mp)
 }

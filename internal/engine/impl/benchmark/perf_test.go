@@ -6,15 +6,162 @@ import (
 	"Go2NetSpectra/internal/engine/impl/exact"
 	"Go2NetSpectra/internal/engine/impl/sketch"
 	"Go2NetSpectra/internal/model"
+	"Go2NetSpectra/internal/probe"
+	"Go2NetSpectra/internal/protocol"
 	"Go2NetSpectra/pkg/pcap"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
 	"testing"
+
+	"github.com/google/gopacket"
+	gopcap "github.com/google/gopacket/pcap"
 )
 
 var packets []*model.PacketInfo
+var (
+	benchPacketOnce sync.Once
+	benchPacketInfo *model.PacketInfo
+	benchRawPacket  gopacket.Packet
+	benchPacketErr  error
+)
+
+func loadBenchmarkPacket(b *testing.B) (*model.PacketInfo, gopacket.Packet) {
+	b.Helper()
+
+	benchPacketOnce.Do(func() {
+		handle, err := gopcap.OpenOffline("../../../../test/data/test.pcap")
+		if err != nil {
+			benchPacketErr = fmt.Errorf("failed to open benchmark fixture: %w", err)
+			return
+		}
+		defer handle.Close()
+
+		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+		packet, ok := <-packetSource.Packets()
+		if !ok {
+			benchPacketErr = fmt.Errorf("benchmark fixture did not yield a packet")
+			return
+		}
+
+		benchRawPacket = packet
+		benchPacketInfo, benchPacketErr = protocol.ParsePacket(packet)
+	})
+
+	if benchPacketErr != nil {
+		b.Fatal(benchPacketErr)
+	}
+
+	return benchPacketInfo, benchRawPacket
+}
+
+func muteBenchmarkLogs() func() {
+	originalWriter := log.Writer()
+	log.SetOutput(io.Discard)
+	return func() {
+		log.SetOutput(originalWriter)
+	}
+}
+
+func BenchmarkProtocolParsePacketInto(b *testing.B) {
+	_, rawPacket := loadBenchmarkPacket(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		var info model.PacketInfo
+		if err := protocol.ParsePacketInto(rawPacket, &info); err != nil {
+			b.Fatalf("ParsePacketInto() unexpected error: %v", err)
+		}
+	}
+}
+
+func BenchmarkPacketCodecRoundTrip(b *testing.B) {
+	packetInfo, _ := loadBenchmarkPacket(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		data, err := probe.MarshalPacketInfo(nil, packetInfo)
+		if err != nil {
+			b.Fatalf("MarshalPacketInfo() unexpected error: %v", err)
+		}
+		if _, err := probe.UnmarshalPacketInfo(data); err != nil {
+			b.Fatalf("UnmarshalPacketInfo() unexpected error: %v", err)
+		}
+	}
+}
+
+func BenchmarkExactTaskProcessPacket(b *testing.B) {
+	packetInfo, _ := loadBenchmarkPacket(b)
+	restoreLogs := muteBenchmarkLogs()
+	defer restoreLogs()
+	task := exact.New("exact-srcip", []string{"SrcIP"}, 64)
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		task.ProcessPacket(packetInfo)
+		if i%1024 == 1023 {
+			task.Reset()
+		}
+	}
+}
+
+func BenchmarkCountMinTaskProcessPacket(b *testing.B) {
+	packetInfo, _ := loadBenchmarkPacket(b)
+	restoreLogs := muteBenchmarkLogs()
+	defer restoreLogs()
+	task := sketch.New(config.SketchTaskDef{
+		Name:            "bench-count-min",
+		SktType:         0,
+		FlowFields:      []string{"SrcIP"},
+		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:           1 << 10,
+		Depth:           2,
+		SizeThereshold:  1,
+		CountThereshold: 1,
+	})
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		task.ProcessPacket(packetInfo)
+		if i%1024 == 1023 {
+			task.Reset()
+		}
+	}
+}
+
+func BenchmarkSuperSpreadTaskProcessPacket(b *testing.B) {
+	packetInfo, _ := loadBenchmarkPacket(b)
+	restoreLogs := muteBenchmarkLogs()
+	defer restoreLogs()
+	task := sketch.New(config.SketchTaskDef{
+		Name:            "bench-super-spread",
+		SktType:         1,
+		FlowFields:      []string{"DstIP"},
+		ElementFields:   []string{"SrcIP"},
+		Width:           1 << 10,
+		Depth:           2,
+		CountThereshold: 1,
+		M:               32,
+		Size:            5,
+		Base:            0.5,
+		B:               1.08,
+	})
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		task.ProcessPacket(packetInfo)
+		if i%1024 == 1023 {
+			task.Reset()
+		}
+	}
+}
 
 func BenchmarkAggregator(b *testing.B) {
 	pcapFilePath := "../../../../test/data/caida.pcap"
@@ -66,10 +213,10 @@ func run_SS_parallel(b *testing.B) {
 		Depth:           2,
 		SizeThereshold:  0,
 		CountThereshold: 512,
-		M: 128,
-		Base: 0.5,
-		Size: 5,
-		B: 1.08,
+		M:               128,
+		Base:            0.5,
+		Size:            5,
+		B:               1.08,
 	}
 
 	task := sketch.New(cfg)
@@ -162,7 +309,7 @@ func run_exact_parallel(b *testing.B) {
 
 func run_ssexact_parallel(b *testing.B) {
 	spreadMap := make(map[string]map[string]bool)
-	var mu sync.Mutex 
+	var mu sync.Mutex
 
 	b.Run("Insert_spreadmap_Parallel", func(b *testing.B) {
 		b.ResetTimer()
@@ -238,10 +385,10 @@ func run_ss(b *testing.B) {
 		Depth:           2,
 		SizeThereshold:  0,
 		CountThereshold: 512,
-		M: 128,
-		Base: 0.5,
-		Size: 5,
-		B: 1.08,
+		M:               128,
+		Base:            0.5,
+		Size:            5,
+		B:               1.08,
 	}
 
 	task := sketch.New(cfg)

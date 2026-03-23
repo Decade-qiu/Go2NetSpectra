@@ -1,6 +1,8 @@
 # Default values for go2netspectra.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
+# Any service address, image, or config-shape change here must stay synchronized
+# with configs/config.yaml and the shared server assembly under internal/.
 
 nameOverride: ""
 fullnameOverride: ""

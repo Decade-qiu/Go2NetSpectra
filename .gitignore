@@ -13,9 +13,15 @@
 
 # Go workspace directory
 vendor/
+bin/
 
 # macOS specific
 .DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
 
 # All test files
 test/

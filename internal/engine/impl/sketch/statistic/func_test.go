@@ -22,7 +22,7 @@ func TestMurmurHash3Uniformity(t *testing.T) {
 		hash := MurmurHash3(key, seed)
 		idx := hash % numBuckets
 		buckets[idx]++
-	}	
+	}
 
 	// 统计平均值
 	sum := 0
@@ -42,4 +42,3 @@ func TestMurmurHash3Uniformity(t *testing.T) {
 
 	fmt.Printf("avg = %.2f, std = %.2f, CV = %.4f\n", avg, std, cv)
 }
-

@@ -24,37 +24,35 @@ func main() {
 		if flag.NArg() > 0 {
 			*prompt = strings.Join(flag.Args(), " ")
 		} else {
-			log.Fatalf("Error: A prompt is required. Use -prompt or provide it as an argument.")
+			log.Fatalf("error: a prompt is required; use -prompt or provide it as an argument")
 		}
 	}
 
 	// 3. Connect to the gRPC server
 	conn, err := grpc.NewClient(*address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Did not connect: %v", err)
+		log.Fatalf("failed to connect to %s: %v", *address, err)
 	}
 	defer conn.Close()
 	client := v1.NewAIServiceClient(conn)
 
 	// 4. Call the streaming RPC
-	log.Println("Sending prompt to AI... (waiting for stream)")
+	log.Println("Sending prompt to AI and waiting for the response stream...")
 	stream, err := client.AnalyzePromptStream(context.Background(), &v1.AnalyzePromptRequest{Prompt: *prompt})
 	if err != nil {
-		log.Fatalf("Error calling AnalyzePromptStream: %v", err)
+		log.Fatalf("failed to call AnalyzePromptStream: %v", err)
 	}
 
 	// 5. Receive and print the stream response
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
-			// Stream ended
-			fmt.Println() // Add a newline for clean terminal output
+			fmt.Println()
 			break
 		}
 		if err != nil {
-			log.Fatalf("Error receiving stream: %v", err)
+			log.Fatalf("failed to receive stream response: %v", err)
 		}
-		// Print the received text chunk directly to standard output
 		fmt.Print(resp.GetChunk())
 	}
 }

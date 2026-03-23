@@ -38,10 +38,10 @@ func TestSuperSpread(t *testing.T) {
 		Depth:           2,
 		SizeThereshold:  0,
 		CountThereshold: 750,
-		M: 128,
-		Base: 0.5,
-		Size: 5,
-		B: 1.08,
+		M:               128,
+		Base:            0.5,
+		Size:            5,
+		B:               1.08,
 	}
 
 	task := New(cfg)
@@ -103,7 +103,7 @@ func TestSuperSpread(t *testing.T) {
 		estimatedSpread := task.Query(flow)
 
 		// Relative Error
-		spreadRE := float64(estimatedSpread)-float64(actualSpread) / float64(actualSpread)
+		spreadRE := float64(estimatedSpread) - float64(actualSpread)/float64(actualSpread)
 		if spreadRE < 0 {
 			spreadRE = -spreadRE
 		}
@@ -146,4 +146,83 @@ func TestSuperSpread(t *testing.T) {
 	log.Printf("[Superspread] TP=%d FP=%d FN=%d", tp, fp, fn)
 	log.Printf("[Superspread] MRE=%.4f Precision=%.4f Recall=%.4f F1=%.4f",
 		spreadMRE, spreadPrec, spreadRec, spreadF1)
+}
+
+func TestSuperSpreadResetKeepsTaskUsable(t *testing.T) {
+	task := New(config.SketchTaskDef{
+		Name:            "fixture-super-spread",
+		SktType:         1,
+		FlowFields:      []string{"DstIP"},
+		ElementFields:   []string{"SrcIP"},
+		Width:           64,
+		Depth:           2,
+		CountThereshold: 1,
+		M:               16,
+		Size:            5,
+		Base:            0.5,
+		B:               1.08,
+	})
+
+	packet := &model.PacketInfo{
+		FiveTuple: model.FiveTuple{
+			SrcIP:    net.ParseIP("192.0.2.1").To16(),
+			DstIP:    net.ParseIP("198.51.100.10").To16(),
+			SrcPort:  12345,
+			DstPort:  443,
+			Protocol: 6,
+		},
+		Length: 128,
+	}
+	task.ProcessPacket(packet)
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("Reset() panicked: %v", recovered)
+		}
+	}()
+
+	task.Reset()
+	task.ProcessPacket(packet)
+
+	snapshot, ok := task.Snapshot().(statistic.HeavyRecord)
+	if !ok {
+		t.Fatalf("Snapshot() type = %T, want statistic.HeavyRecord", task.Snapshot())
+	}
+	if len(snapshot.Count) == 0 {
+		t.Fatal("Snapshot() returned no super spreader records after reset")
+	}
+}
+
+func feedFixturePackets(t *testing.T, pcapFilePath string, task model.Task) {
+	t.Helper()
+
+	pcapReader, err := pcap.NewReader(pcapFilePath)
+	if err != nil {
+		t.Fatalf("NewReader(%q) error: %v", pcapFilePath, err)
+	}
+	defer pcapReader.Close()
+
+	packetChannel := make(chan *v1.PacketInfo, 1024)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for pbPacket := range packetChannel {
+			task.ProcessPacket(&model.PacketInfo{
+				Timestamp: pbPacket.Timestamp.AsTime(),
+				Length:    int(pbPacket.Length),
+				FiveTuple: model.FiveTuple{
+					SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
+					DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
+					SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
+					DstPort:  uint16(pbPacket.FiveTuple.DstPort),
+					Protocol: uint8(pbPacket.FiveTuple.Protocol),
+				},
+			})
+		}
+	}()
+
+	pcapReader.ReadPackets(packetChannel)
+	close(packetChannel)
+	<-done
 }

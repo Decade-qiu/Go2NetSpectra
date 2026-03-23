@@ -20,6 +20,7 @@
 1. 格式化
    - 所有改动过的 Go 文件必须运行 `gofmt`。
    - import 发生变化时优先运行 `goimports`。
+   - Go 源文件名默认使用全小写；多词文件名使用 snake_case，如 `count_min.go`。
 2. import
    - import 使用分组并按字典序排序。
    - 标准库始终放第一组。
@@ -60,6 +61,7 @@
    - 使用 `context.Context` 时，参数名统一为 `ctx`，并放在第一个参数位置。
    - 不要把 `Context` 存进 struct，除非签名受外部接口约束。
    - 优先设计同步函数；如果必须异步，必须让 goroutine 生命周期、退出条件和清理责任清晰可见。
+   - `Start`/`Stop` 一类生命周期 API 优先由实现方自行管理 goroutine，并让 `Start` 返回 `error`；不要默认要求调用方额外包一层 goroutine 才能安全使用。
    - 明确文档化调用方的清理责任、取消语义和重要错误类型。
 8. 数据与 receiver
    - 不要仅为了“少拷贝几个字节”而把参数一律改成指针。
@@ -86,3 +88,10 @@
 ## 详细规范
 
 完整规范、例外说明、示例与来源链接见 `doc/go-codex-style.md`。
+
+## Active Technologies
+- Go 1.25.0 + gopacket, Protobuf/gRPC, NATS, ClickHouse, YAML (001-repo-go-refactor)
+- ClickHouse, optional gob/text/pcap outputs, YAML configuration, (001-repo-go-refactor)
+
+## Recent Changes
+- 001-repo-go-refactor: Added Go 1.25.0 + gopacket, Protobuf/gRPC, NATS, ClickHouse, YAML

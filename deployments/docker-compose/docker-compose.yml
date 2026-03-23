@@ -1,6 +1,8 @@
 version: '3.8'
 
 services:
+  # Runtime/config changes for service addresses, ports, or env vars must stay
+  # synchronized with configs/config.yaml and the shared server runners.
   # nats server for packets brokering
   nats:
     image: nats:2.11-alpine

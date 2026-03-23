@@ -7,31 +7,45 @@
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+[Extract from feature spec: primary requirement, touched pipeline stages, and
+technical approach]
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Go 1.25.x
+**Primary Dependencies**: gopacket, Protobuf/gRPC, NATS, ClickHouse, YAML
+configuration, go-openai
+**Storage**: ClickHouse, optional gob/text/pcap file outputs, NATS as transport
+**Testing**: `go test ./...`, focused package tests, pcap-fixture validation,
+client-script smoke tests, and benchmarks in `internal/engine/impl/benchmark`
+when hot paths change
+**Target Platform**: Linux/macOS development and containerized Linux for Docker,
+Helm, and Kubernetes deployments
+**Project Type**: Distributed Go services, CLI tools, and deployment assets
+**Performance Goals**: Preserve packet-processing throughput and bounded
+snapshot/query overhead for the affected pipeline stage
+**Constraints**: Preserve `cmd/`/`internal/`/`pkg/` boundaries, config-driven
+plugin registration, read-only snapshots, graceful shutdown, and
+environment-driven secrets
+**Scale/Scope**: Multi-service traffic monitoring pipeline supporting both
+offline pcap analysis and real-time NATS ingestion
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- [ ] Pipeline layering is preserved: capture/parse -> protobuf/NATS ->
+      manager -> task group -> writer/query/alert/AI.
+- [ ] New aggregators or writers use `model.Task` / `model.Writer`,
+      `factory.RegisterAggregator`, config entries, and the required blank
+      import in `internal/engine/manager`.
+- [ ] Contract changes list all required sync points across `api/proto/v1/`,
+      `api/gen/v1/`, handlers/clients, `configs/config.yaml`, and
+      `deployments/`.
+- [ ] Concurrency design documents goroutine ownership, channel lifecycle,
+      snapshot/reset behavior, and graceful shutdown semantics.
+- [ ] Verification names exact commands, fixtures, scripts, benchmarks, and
+      deployment smoke checks required for the touched path.
 
 ## Project Structure
 
@@ -48,51 +62,45 @@ specs/[###-feature]/
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
 api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+├── proto/v1/
+└── gen/v1/
+cmd/
+├── ns-ai/
+├── ns-api/v1/
+├── ns-api/v2/
+├── ns-engine/
+├── ns-probe/
+└── pcap-analyzer/
+internal/
+├── ai/
+├── alerter/
+├── config/
+├── engine/
+│   ├── impl/exact/
+│   ├── impl/sketch/
+│   ├── manager/
+│   └── streamaggregator/
+├── factory/
+├── model/
+├── notification/
+├── probe/
+├── protocol/
+└── query/
+pkg/
+└── pcap/
+scripts/
+deployments/
+configs/
+test/
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Document the exact binaries, packages, contracts,
+configs, scripts, and deployment assets touched by the feature. Keep reusable
+logic out of `cmd/`, keep private runtime logic in `internal/`, and treat
+generated protobuf code as derived output.
 
 ## Complexity Tracking
 
@@ -100,5 +108,5 @@ directories captured above]
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| [e.g., New pipeline boundary] | [current need] | [why an existing layer could not absorb it] |
+| [e.g., Additional goroutine or ticker] | [specific runtime problem] | [why synchronous or existing lifecycle handling was insufficient] |

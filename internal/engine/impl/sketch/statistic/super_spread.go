@@ -17,6 +17,7 @@ const (
 	ssDefaultThreshold = 4096
 	ssDefaultWidth     = 1 << 20
 	ssDefaultDepth     = 3
+	maxMergedFieldSize = 74
 )
 
 // GeneralHLL HyperLogLog Sampler
@@ -156,12 +157,14 @@ func NewSuperSpread(width, depth, threshold, m, size uint32, base, b float64, FS
 		values:    make([][]uint32, depth),
 		seeds:     make([]uint32, depth),
 		b:         b,
+		Mus:       make([][]sync.Mutex, depth),
 	}
 
 	for i := 0; i < int(depth); i++ {
 		ss.cm[i] = make([]*GeneralHLL, width)
 		ss.keys[i] = make([][]byte, width)
 		ss.values[i] = make([]uint32, width)
+		ss.Mus[i] = make([]sync.Mutex, width)
 
 		for j := 0; j < int(width); j++ {
 			ss.cm[i][j] = NewGeneralHLL(m, size, base)
@@ -177,7 +180,15 @@ func NewSuperSpread(width, depth, threshold, m, size uint32, base, b float64, FS
 
 // Implementation of SuperSpread insertion
 func (ss *SuperSpread) Insert(flow, elem []byte, size uint32) {
-	merged := append(flow, elem...)
+	mergedLen := len(flow) + len(elem)
+	var mergedBuf [maxMergedFieldSize]byte
+	merged := mergedBuf[:0]
+	if mergedLen > len(mergedBuf) {
+		merged = make([]byte, 0, mergedLen)
+	}
+	merged = append(merged, flow...)
+	merged = append(merged, elem...)
+
 	for i := 0; i < int(ss.d); i++ {
 		j := MurmurHash3(flow, ss.seeds[i]) % ss.w
 

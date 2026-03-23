@@ -5,14 +5,17 @@ import (
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/internal/probe/persistent"
 	"log"
-
-	v1 "Go2NetSpectra/api/gen/v1"
+	"sync"
 
 	"github.com/google/gopacket"
 	"github.com/nats-io/nats.go"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+var publisherBufferPool = sync.Pool{
+	New: func() any {
+		return make([]byte, 0, 256)
+	},
+}
 
 // Publisher is responsible for publishing packet data to a NATS topic.
 type Publisher struct {
@@ -58,26 +61,14 @@ func (p *Publisher) Publish(rawPacket gopacket.Packet, packetInfo *model.PacketI
 		p.persistenceWorker.Enqueue(container)
 	}
 
-	// Convert model.PacketInfo to a protobuf message
-	pbPacket := &v1.PacketInfo{
-		Timestamp: timestamppb.New(packetInfo.Timestamp),
-		FiveTuple: &v1.FiveTuple{
-			SrcIp:    []byte(packetInfo.FiveTuple.SrcIP),
-			DstIp:    []byte(packetInfo.FiveTuple.DstIP),
-			SrcPort:  uint32(packetInfo.FiveTuple.SrcPort),
-			DstPort:  uint32(packetInfo.FiveTuple.DstPort),
-			Protocol: uint32(packetInfo.FiveTuple.Protocol),
-		},
-		Length: uint64(packetInfo.Length),
-	}
-
-	// Serialize to binary format
-	data, err := proto.Marshal(pbPacket)
+	buffer := publisherBufferPool.Get().([]byte)
+	data, err := MarshalPacketInfo(buffer, packetInfo)
 	if err != nil {
+		publisherBufferPool.Put(buffer[:0])
 		return err
 	}
+	defer publisherBufferPool.Put(data[:0])
 
-	// Publish the data
 	return p.nc.Publish(p.subject, data)
 }
 

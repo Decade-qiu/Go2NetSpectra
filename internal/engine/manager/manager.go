@@ -28,7 +28,8 @@ type Manager struct {
 
 	// Snapshotting and Resetting resources
 	period        time.Duration // Global measurement period
-	done  		  chan struct{}
+	done          chan struct{}
+	stopOnce      sync.Once
 	snapshotterWg sync.WaitGroup
 	resetterWg    sync.WaitGroup // New WaitGroup for the resetter
 }
@@ -77,9 +78,9 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		taskGroups:    taskGroups,
 		alerter:       alertr,
 		period:        period,
-		done:  		   make(chan struct{}),
+		done:          make(chan struct{}),
 		packetChannel: make(chan *v1.PacketInfo, cfg.Aggregator.SizeOfPacketChannel),
-		numWorkers:    cfg.Aggregator.NumWorkers,
+		numWorkers:    max(1, cfg.Aggregator.NumWorkers),
 	}, nil
 }
 
@@ -102,7 +103,7 @@ func (m *Manager) Start() {
 
 	// Start the independent alerter goroutine if it's enabled.
 	if m.alerter != nil {
-		go m.alerter.Start()
+		m.alerter.Start()
 	}
 
 	// Start the packet processing worker pool.
@@ -189,58 +190,70 @@ func (m *Manager) resetAllTasks() {
 		}
 	}
 	wg.Wait() // Wait for all tasks to complete
-	log.Println("All tasks have been reset at ", time.Now().Format("2006-01-02_15-04-05"))
+	log.Printf("All tasks have been reset at %s", time.Now().Format("2006-01-02_15-04-05"))
 }
 
 // Stop gracefully shuts down the manager.
 func (m *Manager) Stop() {
-	log.Println("Manager stopping...")
-	// 1. Stop accepting new packets.
-	close(m.packetChannel)
+	m.stopOnce.Do(func() {
+		log.Println("Manager stopping...")
+		close(m.packetChannel)
 
-	// 2. Wait for all workers to finish processing buffered packets.
-	log.Println("Waiting for workers to finish...")
-	m.workerWg.Wait()
+		log.Println("Waiting for workers to finish...")
+		m.workerWg.Wait()
 
-	// 4. Signal snapshotters and resetter to take final actions and exit.
-	close(m.done)
-	log.Println("Waiting for snapshotters and resetter to finish...")
+		close(m.done)
+		log.Println("Waiting for snapshotters and resetter to finish...")
 
-	// 5. Wait for all goroutines to complete.
-	m.snapshotterWg.Wait()
-	m.resetterWg.Wait()
+		m.snapshotterWg.Wait()
+		m.resetterWg.Wait()
 
-	// 6. Stop the alerter if it's running.
-	if m.alerter != nil {
-		m.alerter.Stop()
-	}
+		if m.alerter != nil {
+			m.alerter.Stop()
+		}
 
-	log.Println("Manager stopped.")
+		log.Println("Manager stopped.")
+	})
 }
 
 func (m *Manager) worker() {
 	defer m.workerWg.Done()
 	for pbPacket := range m.packetChannel {
-		info := &model.PacketInfo{
-			Timestamp: pbPacket.Timestamp.AsTime(),
-			Length:    int(pbPacket.Length),
-			FiveTuple: model.FiveTuple{
-				SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp).To16(),
-				DstIP:    net.IP(pbPacket.FiveTuple.DstIp).To16(),
-				SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-				DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-				Protocol: uint8(pbPacket.FiveTuple.Protocol),
-			},
-		}
-		// Fan out the packet to all tasks in all groups
-		for _, group := range m.taskGroups {
-			for _, task := range group.Tasks {
-				task.ProcessPacket(info)
-			}
+		if err := m.processProtoPacket(pbPacket); err != nil {
+			log.Printf("Manager failed to process protobuf packet: %v", err)
 		}
 	}
 }
 
 func (m *Manager) InputChannel() chan<- *v1.PacketInfo {
 	return m.packetChannel
+}
+
+func (m *Manager) processProtoPacket(pbPacket *v1.PacketInfo) error {
+	if pbPacket == nil {
+		return fmt.Errorf("nil protobuf packet")
+	}
+	if pbPacket.FiveTuple == nil {
+		return fmt.Errorf("nil protobuf five tuple")
+	}
+
+	info := &model.PacketInfo{
+		Timestamp: pbPacket.Timestamp.AsTime(),
+		Length:    int(pbPacket.Length),
+		FiveTuple: model.FiveTuple{
+			SrcIP:    append(net.IP(nil), pbPacket.FiveTuple.SrcIp...),
+			DstIP:    append(net.IP(nil), pbPacket.FiveTuple.DstIp...),
+			SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
+			DstPort:  uint16(pbPacket.FiveTuple.DstPort),
+			Protocol: uint8(pbPacket.FiveTuple.Protocol),
+		},
+	}
+
+	for _, group := range m.taskGroups {
+		for _, task := range group.Tasks {
+			task.ProcessPacket(info)
+		}
+	}
+
+	return nil
 }
