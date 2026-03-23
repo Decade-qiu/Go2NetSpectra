@@ -1,15 +1,16 @@
 package ai
 
 import (
-	"Go2NetSpectra/internal/config"
 	"context"
 	"errors"
 	"fmt"
 
+	"Go2NetSpectra/internal/config"
+
 	"github.com/sashabaranov/go-openai"
 )
 
-// AlerterAnalyzer implements the Analyzer interface using OpenAI's API
+// AlerterAnalyzer implements the Analyzer interface using OpenAI's API.
 type AlerterAnalyzer struct {
 	cfg    *config.AIConfig
 	client *openai.Client
@@ -17,8 +18,11 @@ type AlerterAnalyzer struct {
 
 // NewAlerterAnalyzer creates a new instance of AlerterAnalyzer.
 func NewAlerterAnalyzer(cfg *config.AIConfig) (*AlerterAnalyzer, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("ai config is nil")
+	}
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("AI API key is not configured")
+		return nil, fmt.Errorf("ai api key is not configured")
 	}
 
 	// Create a default OpenAI configuration
@@ -63,16 +67,16 @@ func (a *AlerterAnalyzer) AnalyzeTraffic(ctx context.Context, input string) (str
 	)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return "", fmt.Errorf("AI request timeout: %w", err)
+			return "", fmt.Errorf("ai request timeout: %w", err)
 		}
 		if errors.Is(err, context.Canceled) {
-			return "", fmt.Errorf("AI request canceled by client: %w", err)
+			return "", fmt.Errorf("ai request canceled by client: %w", err)
 		}
-		return "", fmt.Errorf("OpenAI API error: %w", err)
+		return "", fmt.Errorf("openai api error: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("OpenAI API returned no choices")
+		return "", fmt.Errorf("openai api returned no choices")
 	}
 
 	return resp.Choices[0].Message.Content, nil

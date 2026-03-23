@@ -2,14 +2,10 @@ package probe
 
 import (
 	"Go2NetSpectra/internal/config"
-	"log"
-	"net"
-
-	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/model"
+	"log"
 
 	"github.com/nats-io/nats.go"
-	"google.golang.org/protobuf/proto"
 )
 
 // PacketHandler is a function that processes a received PacketInfo.
@@ -35,24 +31,10 @@ func NewSubscriber(cfg config.ProbeConfig) (*Subscriber, error) {
 // Start subscribes to the given subject and starts processing messages with the provided handler.
 func (s *Subscriber) Start(handler PacketHandler) error {
 	sub, err := s.nc.Subscribe(s.subject, func(msg *nats.Msg) {
-		// Decode the protobuf message
-		var pbPacket v1.PacketInfo
-		if err := proto.Unmarshal(msg.Data, &pbPacket); err != nil {
-			log.Printf("Error unmarshalling protobuf: %v", err)
+		info, err := UnmarshalPacketInfo(msg.Data)
+		if err != nil {
+			log.Printf("Error decoding protobuf packet: %v", err)
 			return
-		}
-
-		// Convert from protobuf type to internal model type
-		info := model.PacketInfo{
-			Timestamp: pbPacket.Timestamp.AsTime(),
-			Length:    int(pbPacket.Length),
-			FiveTuple: model.FiveTuple{
-				SrcIP:    net.IP(pbPacket.FiveTuple.SrcIp),
-				DstIP:    net.IP(pbPacket.FiveTuple.DstIp),
-				SrcPort:  uint16(pbPacket.FiveTuple.SrcPort),
-				DstPort:  uint16(pbPacket.FiveTuple.DstPort),
-				Protocol: uint8(pbPacket.FiveTuple.Protocol),
-			},
 		}
 		handler(info)
 	})

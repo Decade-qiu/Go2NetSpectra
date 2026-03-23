@@ -1,0 +1,14 @@
+.git/
+.gitignore
+.dockerignore
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+.env*
+.vscode/
+.idea/
+bin/
+coverage/
+test/

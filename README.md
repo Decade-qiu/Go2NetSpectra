@@ -166,6 +166,15 @@ graph TD
 
 ---
 
+## Boundary Ownership And Refactor Guardrails
+
+- `cmd/` packages are process wiring only. Shared runtime assembly belongs in `internal/api`, `internal/ai`, or `internal/engine/app`.
+- `internal/probe` and `pkg/pcap` own transport packet conversion; `internal/engine/manager` owns fan-out and lifecycle orchestration.
+- `api/proto/v1/`, `configs/config.yaml`, Docker Compose values, and Helm values are synchronized product surfaces. Any behavioral key change must update all affected runtime and deployment assets together.
+- Use [module-boundaries.md](doc/refactor/module-boundaries.md) for the current ownership map and [build.md](doc/build.md) for validation entrypoints.
+
+---
+
 ## 🚀 Quick Start
 
 Choose the deployment option that best fits your needs.
@@ -232,7 +241,7 @@ In a **new terminal**, capture live traffic:
 
 ```bash
 # Replace <interface_name> with your network interface (e.g., en0, eth0, wlan0)
-sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
+sudo go run ./cmd/ns-probe/main.go --mode=pub --iface=<interface_name>
 ```
 
 **Step 4: Query & Visualize**
@@ -299,7 +308,7 @@ go run ./cmd/ns-api/v2/main.go
 go run ./cmd/ns-ai/main.go
 
 # Terminal 6: Run Probe (requires sudo)
-sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
+sudo go run ./cmd/ns-probe/main.go --mode=pub --iface=<interface_name>
 ```
 
 Applications automatically load `.env` configuration.
@@ -563,13 +572,17 @@ go test -v ./internal/engine/impl/sketch/
 
 # Sketch vs Exact performance comparison
 go test -bench=. ./internal/engine/impl/benchmark/
+
+# Representative hot-path microbenchmarks
+go test -run '^$' -bench '^Benchmark(ProtocolParsePacketInto|PacketCodecRoundTrip|ExactTaskProcessPacket|CountMinTaskProcessPacket|SuperSpreadTaskProcessPacket)$' -benchmem ./internal/engine/impl/benchmark/
+go test -run '^$' -bench '^BenchmarkMurmurHash3RepresentativeFlowInputs$' -benchmem ./scripts/hash/
 ```
 
 ### Validate Against Test PCAP
 
 ```bash
 # Analyze included test file
-go run ./cmd/pcap-analyzer/main.go
+go run ./cmd/pcap-analyzer/main.go test/data/test.pcap
 
 # Query results
 go run ./scripts/query/v2/main.go --mode=aggregate --task=per_src_ip

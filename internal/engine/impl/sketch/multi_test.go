@@ -3,7 +3,6 @@ package sketch
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
 	"Go2NetSpectra/internal/config"
-	"Go2NetSpectra/internal/engine/impl/exact"
 	"Go2NetSpectra/internal/engine/impl/sketch/statistic"
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/pkg/pcap"
@@ -31,10 +30,16 @@ func TestMultiProcess(t *testing.T) {
 	CountThreshold := uint32(4096)
 	SizeThreshold := uint32(4096 * 1024)
 
-	// Initialize CountMin sketch
-	// task := New("per_src_flow", []string{"SrcIP"}, []string{"DstIP", "SrcPort", "DstPort", "Protocol"}, 1<<15, 2, SizeThreshold, CountThreshold)
-
-	task := exact.New("exact_per_src", []string{"SrcIP"}, 64)
+	task := New(config.SketchTaskDef{
+		Name:            "per_src_flow",
+		SktType:         0,
+		FlowFields:      []string{"SrcIP"},
+		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:           1 << 13,
+		Depth:           2,
+		SizeThereshold:  SizeThreshold,
+		CountThereshold: CountThreshold,
+	})
 
 	// Ground truth (map-based)
 	countMap := make(map[string]int)
@@ -211,10 +216,10 @@ func TestMultiProcessSS(t *testing.T) {
 		Depth:           2,
 		SizeThereshold:  0,
 		CountThereshold: 512,
-		M: 128,
-		Base: 0.5,
-		Size: 5,
-		B: 1.08,
+		M:               128,
+		Base:            0.5,
+		Size:            5,
+		B:               1.08,
 	}
 
 	task := New(cfg)
@@ -287,7 +292,7 @@ func TestMultiProcessSS(t *testing.T) {
 		estimatedSpread := task.Query(flow)
 
 		// Relative Error
-		spreadRE := float64(estimatedSpread)-float64(actualSpread) / float64(actualSpread)
+		spreadRE := float64(estimatedSpread) - float64(actualSpread)/float64(actualSpread)
 		if spreadRE < 0 {
 			spreadRE = -spreadRE
 		}

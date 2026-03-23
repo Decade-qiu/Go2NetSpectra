@@ -6,7 +6,7 @@ import (
 	"Go2NetSpectra/internal/factory"
 	"Go2NetSpectra/internal/model"
 	"fmt"
-	"hash/fnv"
+	"hash/maphash"
 	"log"
 	"net"
 	"strconv"
@@ -64,9 +64,9 @@ func init() {
 // --- Task Implementation ---
 
 const (
-	IPv4ByteSize = 4
-	IPv6ByteSize = 16
-	PortByteSize = 2
+	IPv4ByteSize  = 4
+	IPv6ByteSize  = 16
+	PortByteSize  = 2
 	ProtoByteSize = 1
 )
 
@@ -75,10 +75,11 @@ const defaultShardCount = 256
 // Task performs exact aggregation for a specific set of key fields using a sharded map.
 // It implements the model.Task interface.
 type Task struct {
-	name        string
-	keyFields   []string
-	shards      []*statistic.Shard
-	shardCount  uint32
+	name       string
+	keyFields  []string
+	shards     []*statistic.Shard
+	shardCount uint32
+	shardSeed  maphash.Seed
 }
 
 // New creates a new exact aggregation task.
@@ -88,10 +89,11 @@ func New(name string, keyFields []string, numShards uint32) model.Task {
 	}
 	log.Printf("Creating ExactTask '%s' with %d shards for keys: %v", name, numShards, keyFields)
 	task := &Task{
-		name:        name,
-		keyFields:   keyFields,
-		shards:      make([]*statistic.Shard, numShards),
-		shardCount:  numShards,
+		name:       name,
+		keyFields:  keyFields,
+		shards:     make([]*statistic.Shard, numShards),
+		shardCount: numShards,
+		shardSeed:  maphash.MakeSeed(),
 	}
 	for i := 0; i < int(numShards); i++ {
 		task.shards[i] = &statistic.Shard{
@@ -106,12 +108,12 @@ func (t *Task) Name() string {
 	return t.name
 }
 
-// Fields 
+// Fields
 func (t *Task) Fields() []string {
 	return []string{}
 }
 
-// Func 
+// Func
 func (t *Task) DecodeFlowFunc() func(flow []byte, fields []string) string {
 	return func(flow []byte, fields []string) string {
 		return ""
@@ -150,45 +152,45 @@ func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 // Suitable for write-heavy, read-light scenarios.
 // Concurrent writes are safe; snapshot reflects a consistent state at the moment of call.
 func (t *Task) Snapshot() interface{} {
-    snapshotShards := make([]*statistic.Shard, t.shardCount)
-    var wg sync.WaitGroup
-    wg.Add(int(t.shardCount)) // Wait for all shards to finish copying
+	snapshotShards := make([]*statistic.Shard, t.shardCount)
+	var wg sync.WaitGroup
+	wg.Add(int(t.shardCount)) // Wait for all shards to finish copying
 
-    for i := 0; i < int(t.shardCount); i++ {
-        go func(i int) {
-            defer wg.Done()
+	for i := 0; i < int(t.shardCount); i++ {
+		go func(i int) {
+			defer wg.Done()
 
-            shard := t.shards[i]
+			shard := t.shards[i]
 
-            // Acquire read lock to safely read shard.Flows
-            // Allows concurrent reads but blocks writes
-            shard.Mu.RLock()
+			// Acquire read lock to safely read shard.Flows
+			// Allows concurrent reads but blocks writes
+			shard.Mu.RLock()
 
-            // Deep copy the flows map to ensure the snapshot is independent
-            copiedFlows := make(map[string]*statistic.Flow, len(shard.Flows))
-            for k, v := range shard.Flows {
-                // Copy each Flow struct to ensure modifications to original Flow
-                // do not affect the snapshot
-                flowCopy := *v
-                copiedFlows[k] = &flowCopy
-            }
+			// Deep copy the flows map to ensure the snapshot is independent
+			copiedFlows := make(map[string]*statistic.Flow, len(shard.Flows))
+			for k, v := range shard.Flows {
+				// Copy each Flow struct to ensure modifications to original Flow
+				// do not affect the snapshot
+				flowCopy := *v
+				copiedFlows[k] = &flowCopy
+			}
 
-            shard.Mu.RUnlock() // Release read lock
+			shard.Mu.RUnlock() // Release read lock
 
-            // Store the shard snapshot
-            snapshotShards[i] = &statistic.Shard{
-                Flows: copiedFlows,
-            }
-        }(i)
-    }
+			// Store the shard snapshot
+			snapshotShards[i] = &statistic.Shard{
+				Flows: copiedFlows,
+			}
+		}(i)
+	}
 
-    wg.Wait() // Wait until all shard snapshots are complete
+	wg.Wait() // Wait until all shard snapshots are complete
 
-    // Return the full snapshot
-    return statistic.SnapshotData{
-        TaskName: t.name,
-        Shards:   snapshotShards,
-    }
+	// Return the full snapshot
+	return statistic.SnapshotData{
+		TaskName: t.name,
+		Shards:   snapshotShards,
+	}
 }
 
 // Reset clears the internal state of the task, preparing for a new measurement period.
@@ -197,7 +199,7 @@ func (t *Task) Reset() {
 	wait.Add(int(t.shardCount)) // Wait for all shards to be reset
 
 	for i := 0; i < int(t.shardCount); i++ {
-		go func (i int) {
+		go func(i int) {
 			defer wait.Done()
 			shard := t.shards[i]
 			shard.Mu.Lock()
@@ -325,16 +327,14 @@ func (t *Task) Query(flow []byte) uint64 {
 	shard.Mu.RLock()
 	defer shard.Mu.RUnlock()
 	if flow, ok := shard.Flows[key]; ok {
-		return flow.PacketCount << 32 | flow.ByteCount
+		return flow.PacketCount<<32 | flow.ByteCount
 	}
 	return 0
 }
 
 // getShard returns the appropriate shard for a given key.
 func (t *Task) getShard(key string) *statistic.Shard {
-	hasher := fnv.New32a()
-	hasher.Write([]byte(key))
-	return t.shards[hasher.Sum32()%t.shardCount]
+	return t.shards[uint32(maphash.String(t.shardSeed, key))%t.shardCount]
 }
 
 // generateKeyAndFields creates a unique string key and a field map for a packet.

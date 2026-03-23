@@ -17,3 +17,13 @@
 #
 # # Ignore all files in the crds folder
 # crds/
+.git/
+.DS_Store
+*.tmp
+*.swp
+*.secret.yaml
+secrets/
+.kube/
+kubeconfig*
+*.key
+*.crt

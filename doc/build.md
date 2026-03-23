@@ -10,7 +10,7 @@
 
 在开始之前，请确保您的开发环境中已安装以下工具：
 
-- **Go**: 版本 `1.21` 或更高。请通过 `go version` 命令确认。
+- **Go**: 版本 `1.25` 或更高。请通过 `go version` 命令确认。
 - **Protobuf Compiler (`protoc`)**: 用于将 `.proto` 文件编译成 Go 代码。请从 [Protobuf GitHub Releases](https://github.com/protocolbuffers/protobuf/releases) 下载并安装。
 - **Docker**: 用于快速启动 NATS、ClickHouse 等依赖服务，以及进行容器化部署。
 - **`godotenv`**: Go 应用程序用于加载 `.env` 文件的库，通过 `go mod` 自动管理。
@@ -86,8 +86,21 @@ go run ./cmd/ns-api/v2/main.go
 go run ./cmd/ns-ai/main.go
 
 # 终端 6: 启动探针
-sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
+sudo go run ./cmd/ns-probe/main.go --mode=pub --iface=<interface_name>
 ```
+
+### 3.3. 统一构建与校验入口
+
+为了让重构阶段的验证保持一致，请优先使用仓库脚本：
+
+```sh
+./scripts/lint.sh
+./scripts/build.sh
+```
+
+- `scripts/lint.sh` 会执行 `gofmt` 检查、Go 文件名小写检查，并跑当前重构阶段覆盖到的关键回归包。
+- `scripts/build.sh` 会构建 `ns-api-v1`、`ns-api-v2`、`ns-ai`、`ns-engine`、`ns-probe` 和 `pcap-analyzer`。
+- 入口装配代码现在集中在 `internal/api/`、`internal/ai/server.go` 和 `internal/engine/app/runner.go`，`cmd/` 目录只保留启动与信号处理。
 
 ---
 
@@ -117,7 +130,12 @@ docker compose up --build
 
 *   **运行探针**: 在一个新终端中，运行 `ns-probe` 向容器化的 NATS 发送数据。确保您的本地 `.env` (或环境变量) 中 `NATS_URL` 配置为 `nats://localhost:4222`。
     ```sh
-    sudo go run ./cmd/ns-probe/main.go --mode=probe --iface=<interface_name>
+    sudo go run ./cmd/ns-probe/main.go --mode=pub --iface=<interface_name>
+    ```
+
+*   **验证实时订阅路径**: 在另一个终端中订阅同一主题，确认 live-probe 路径仍然可用。
+    ```sh
+    go run ./cmd/ns-probe/main.go --mode=sub
     ```
 
 *   **使用查询脚本**: 在另一个新终端中，使用 **v2 脚本** 与 `ns-api` 的 gRPC 服务交互。确保您的本地 `.env` (或环境变量) 中 `API_GRPC_LISTEN_ADDR` 配置为 `localhost:50051`。
@@ -131,6 +149,8 @@ docker compose up --build
     # 与 AI 服务交互
     go run ./scripts/ask-ai/main.go "Summarize the network traffic anomalies."
     ```
+
+*   **验证告警与 AI 链路**: 保持 `alerter.enabled: true`，观察 `ns-engine` 和 `ns-ai` 日志，确认触发规则后会产生通知或 AI 富化记录。
 
 ---
 
@@ -146,6 +166,12 @@ go test -v ./internal/engine/impl/sketch/
 **运行 `sketch` 与 `exact` 的性能对比基准测试**:
 ```sh
 go test -bench=. ./internal/engine/impl/benchmark/
+```
+
+**运行代表性热点路径基准测试**:
+```sh
+go test -run '^$' -bench '^Benchmark(ProtocolParsePacketInto|PacketCodecRoundTrip|ExactTaskProcessPacket|CountMinTaskProcessPacket|SuperSpreadTaskProcessPacket)$' -benchmem ./internal/engine/impl/benchmark/
+go test -run '^$' -bench '^BenchmarkMurmurHash3RepresentativeFlowInputs$' -benchmem ./scripts/hash/
 ```
 
 ---

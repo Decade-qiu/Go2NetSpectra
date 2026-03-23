@@ -10,8 +10,8 @@ type Sketch interface {
 }
 
 type HeavySize struct {
-	Flow  []byte
-	Size  uint32
+	Flow []byte
+	Size uint32
 }
 
 type HeavyCount struct {

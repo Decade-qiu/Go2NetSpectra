@@ -28,13 +28,13 @@ func main() {
 	flag.Parse()
 
 	if *taskName == "" && *mode != "aggregate" {
-		log.Fatal("Error: -task flag is required for this mode")
+		log.Fatal("error: -task flag is required for this mode")
 	}
 
 	// Set up a connection to the server.
 	conn, err := grpc.NewClient(*serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		log.Fatalf("failed to connect to %s: %v", *serverAddr, err)
 	}
 	defer conn.Close()
 
@@ -48,7 +48,7 @@ func main() {
 		doAggregateQuery(ctx, client, *taskName, *endTimeStr)
 	case "trace":
 		if *flowKey == "" {
-			log.Fatal("Error: -key flag is required for trace mode")
+			log.Fatal("error: -key flag is required for trace mode")
 		}
 		doTraceQuery(ctx, client, *taskName, *flowKey, *endTimeStr)
 	case "heavyhitters":
@@ -56,7 +56,7 @@ func main() {
 	case "superspreader":
 		doSuperSpreaderQuery(ctx, client, *taskName, *limit, *endTimeStr)
 	default:
-		log.Fatalf("Unknown mode: %s. Use 'aggregate', 'trace', 'heavyhitters', or 'superspreader'", *mode)
+		log.Fatalf("unknown mode %q; use 'aggregate', 'trace', 'heavyhitters', or 'superspreader'", *mode)
 	}
 }
 
@@ -96,7 +96,7 @@ func doTraceQuery(ctx context.Context, client v1.QueryServiceClient, taskName, f
 
 	flowKeys, err := parseFlowKeys(flowKeyStr)
 	if err != nil {
-		log.Fatalf("Invalid flow key format: %v", err)
+		log.Fatalf("invalid flow key format: %v", err)
 	}
 
 	req := &v1.TraceFlowRequest{
@@ -202,7 +202,7 @@ func doSuperSpreaderQuery(ctx context.Context, client v1.QueryServiceClient, tas
 func parseAndConvert(endTimeStr string) *timestamppb.Timestamp {
 	t, err := time.Parse(time.RFC3339, endTimeStr)
 	if err != nil {
-		log.Fatalf("Failed to parse time string: %v", err)
+		log.Fatalf("failed to parse time string: %v", err)
 		return nil
 	}
 	ts := timestamppb.New(t)

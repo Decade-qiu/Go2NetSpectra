@@ -67,25 +67,25 @@ func init() {
 // --- Task Implementation ---
 
 const (
-	IPv4ByteSize = 4
-	IPv6ByteSize = 16
-	PortByteSize = 2
+	IPv4ByteSize  = 4
+	IPv6ByteSize  = 16
+	PortByteSize  = 2
 	ProtoByteSize = 1
 
 	MaxFieldSize = 37 // IPv6(16) + IPv6(16) + Port(2) + Port(2) + Proto(1) = 37
 )
 
 var (
-    flowPool = sync.Pool{
-        New: func() any {
-            return make([]byte, MaxFieldSize)
-        },
-    }
-    elemPool = sync.Pool{
-        New: func() any {
-            return make([]byte, MaxFieldSize)
-        },
-    }
+	flowPool = sync.Pool{
+		New: func() any {
+			return make([]byte, MaxFieldSize)
+		},
+	}
+	elemPool = sync.Pool{
+		New: func() any {
+			return make([]byte, MaxFieldSize)
+		},
+	}
 )
 
 type Task struct {
@@ -99,7 +99,7 @@ type Task struct {
 	// the byte size of element key
 	elemSize uint32
 	// data
-	sketch   statistic.Sketch
+	sketch statistic.Sketch
 }
 
 // New creates a new Sketch task based on the provided configuration.
@@ -142,12 +142,12 @@ func (t *Task) Name() string {
 	return t.name
 }
 
-// Fields 
+// Fields
 func (t *Task) Fields() []string {
 	return t.flowFields
 }
 
-// Func 
+// Func
 func (t *Task) DecodeFlowFunc() func(flow []byte, fields []string) string {
 	return t.DecodeFlow
 }
@@ -155,9 +155,9 @@ func (t *Task) DecodeFlowFunc() func(flow []byte, fields []string) string {
 // ProcessPacket processes a single packet, creating or updating a flow in the correct shard.
 func (t *Task) ProcessPacket(packetInfo *model.PacketInfo) {
 	flow := flowPool.Get().([]byte)[:t.flowSize]
-    elem := elemPool.Get().([]byte)[:t.elemSize]
+	elem := elemPool.Get().([]byte)[:t.elemSize]
 	defer flowPool.Put(flow)
- 	defer elemPool.Put(elem)
+	defer elemPool.Put(elem)
 
 	err := t.generateFlowAndElem(flow, elem, &packetInfo.FiveTuple)
 	if err != nil {
@@ -259,7 +259,7 @@ func check(value, threshold float64, operator string) bool {
 }
 
 // generateFlowAndElem creates Flow and Element keys based on the configured fields.
-func (t *Task) generateFlowAndElem(flow, elem []byte, ft *model.FiveTuple) (error) {
+func (t *Task) generateFlowAndElem(flow, elem []byte, ft *model.FiveTuple) error {
 	offset := 0
 	for _, f := range t.flowFields {
 		offset = t.EncodeFlow(flow, offset, f, ft)
@@ -296,27 +296,27 @@ func (t *Task) EncodeFlow(buf []byte, offset int, field string, ft *model.FiveTu
 }
 
 func (t *Task) DecodeFlow(flow []byte, fields []string) string {
-    var parts []string
-    offset := 0
+	var parts []string
+	offset := 0
 
-    for _, f := range fields {
-        switch f {
-        case "SrcIP", "DstIP":
-            ip := net.IP(flow[offset : offset+IPv6ByteSize])
-            parts = append(parts, ip.String())
-            offset += IPv6ByteSize
-        case "SrcPort", "DstPort":
-            port := binary.BigEndian.Uint16(flow[offset : offset+PortByteSize])
-            parts = append(parts, strconv.Itoa(int(port)))
-            offset += PortByteSize
-        case "Protocol":
-            proto := uint8(flow[offset])
-            parts = append(parts, strconv.Itoa(int(proto)))
-            offset += ProtoByteSize
-        }
-    }
+	for _, f := range fields {
+		switch f {
+		case "SrcIP", "DstIP":
+			ip := net.IP(flow[offset : offset+IPv6ByteSize])
+			parts = append(parts, ip.String())
+			offset += IPv6ByteSize
+		case "SrcPort", "DstPort":
+			port := binary.BigEndian.Uint16(flow[offset : offset+PortByteSize])
+			parts = append(parts, strconv.Itoa(int(port)))
+			offset += PortByteSize
+		case "Protocol":
+			proto := uint8(flow[offset])
+			parts = append(parts, strconv.Itoa(int(proto)))
+			offset += ProtoByteSize
+		}
+	}
 
-    return strings.Join(parts, " ")
+	return strings.Join(parts, " ")
 }
 
 func fieldByteSize(field string) uint32 {

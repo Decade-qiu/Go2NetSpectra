@@ -36,15 +36,18 @@ func main() {
 
 	flag.Parse()
 
-	log.Printf("Running in '%s' mode.", *mode)
+	log.Printf("running query helper in %q mode", *mode)
 
 	switch *mode {
 	case "aggregate":
 		queryAggregation(*taskName, *endTimeStr)
 	case "trace":
+		if *taskName == "" {
+			log.Fatal("error: -task flag is required for trace mode")
+		}
 		traceFlow(*taskName, *flowKey, *endTimeStr)
 	default:
-		log.Fatalf("Invalid mode: %s. Use 'aggregate' or 'trace'.", *mode)
+		log.Fatalf("invalid mode %q; use 'aggregate' or 'trace'", *mode)
 	}
 }
 
@@ -59,24 +62,24 @@ func queryAggregation(taskName, endTime string) {
 
 	jsonReqBody, err := json.Marshal(reqBody)
 	if err != nil {
-		log.Fatalf("Error marshalling request body: %v", err)
+		log.Fatalf("failed to marshal request body: %v", err)
 	}
 
 	log.Printf("Sending request to %s with body:\n%s\n", apiURL, string(jsonReqBody))
 
 	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonReqBody))
 	if err != nil {
-		log.Fatalf("Error sending request: %v", err)
+		log.Fatalf("failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalf("Error reading response body: %v", err)
+		log.Fatalf("failed to read response body: %v", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("API returned non-200 status code: %d\nResponse: %s", resp.StatusCode, string(respBody))
+		log.Fatalf("api returned status %d\nresponse: %s", resp.StatusCode, string(respBody))
 	}
 
 	var prettyJSON bytes.Buffer
@@ -111,24 +114,24 @@ func traceFlow(taskName, flowKeyStr, endTime string) {
 
 	jsonReqBody, err := json.Marshal(reqBody)
 	if err != nil {
-		log.Fatalf("Error marshalling request body: %v", err)
+		log.Fatalf("failed to marshal request body: %v", err)
 	}
 
 	log.Printf("Sending request to %s with body:\n%s\n", apiURL, string(jsonReqBody))
 
 	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonReqBody))
 	if err != nil {
-		log.Fatalf("Error sending request: %v", err)
+		log.Fatalf("failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalf("Error reading response body: %v", err)
+		log.Fatalf("failed to read response body: %v", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("API returned non-200 status code: %d\nResponse: %s", resp.StatusCode, string(respBody))
+		log.Fatalf("api returned status %d\nresponse: %s", resp.StatusCode, string(respBody))
 	}
 
 	var prettyJSON bytes.Buffer

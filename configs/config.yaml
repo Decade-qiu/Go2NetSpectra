@@ -1,4 +1,6 @@
-# API Server settings
+# API Server settings.
+# Any API surface or config-key change here must be synchronized with
+# `internal/api`, deployment assets, and developer/operator documentation.
 api:
   # Address for the API server to listen on.
   grpc_listen_addr: "${API_GRPC_LISTEN_ADDR}"
@@ -16,7 +18,9 @@ ai:
   # ns-ai gRPC address 
   grpc_listen_addr: "${AI_GRPC_LISTEN_ADDR}"
 
-# Probe settings
+# Probe settings.
+# Transport packet semantics here must stay aligned with `internal/probe`,
+# `pkg/pcap`, and any deployment/runtime environment variables.
 probe:
   # NATS server URL for the probe to connect to.
   nats_url: "${NATS_URL}"
@@ -67,6 +71,8 @@ smtp:
   to: "${SMTP_TO}" # Comma-separated list of recipients
 
 # Configuration file for the network traffic aggregator system.
+# Aggregator type names and writer settings are public runtime surfaces that
+# must stay aligned with plugin registration and query/deployment expectations.
 aggregator:
   # Type of aggregator to use. Currently only "exact" is supported.
   types:

@@ -5,6 +5,7 @@ import (
 	"Go2NetSpectra/internal/model"
 	"Go2NetSpectra/internal/probe"
 	"Go2NetSpectra/internal/protocol"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -17,31 +18,33 @@ import (
 )
 
 const (
-	snapshotLen int32 = 1600
-	promiscuous       = true
-	timeout          = pcap.BlockForever
+	snapshotLen   int32 = 1600
+	promiscuous         = true
+	timeout             = pcap.BlockForever
+	modePublish         = "pub"
+	modeSubscribe       = "sub"
 )
 
 func main() {
 	// --- Command-Line Flag Parsing ---
-	mode := flag.String("mode", "sub", "Operating mode: 'pub' to capture and publish, 'sub' to subscribe and print.")
-	iface := flag.String("iface", "", "Interface to capture packets from (required for pub mode).")
+	mode := flag.String("mode", modeSubscribe, "Operating mode: 'pub' captures and publishes packets, 'sub' subscribes and prints.")
+	iface := flag.String("iface", "", "Interface to capture packets from. Required in pub mode.")
 	flag.Parse()
 
 	// Load configuration
 	cfg, err := config.LoadConfig("configs/config.yaml")
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Fatalf("failed to load configuration: %v", err)
 	}
 
 	// --- Mode Dispatch ---
 	switch *mode {
-	case "pub":
+	case modePublish:
 		runProbe(cfg.Probe, *iface)
-	case "sub":
+	case modeSubscribe:
 		runSubscriber(cfg.Probe)
 	default:
-		fmt.Fprintf(os.Stderr, "Invalid mode: %s\n", *mode)
+		fmt.Fprintf(os.Stderr, "invalid mode %q\n", *mode)
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -50,31 +53,30 @@ func main() {
 // runProbe contains the logic for capturing packets and publishing them to NATS.
 func runProbe(cfg config.ProbeConfig, interfaceName string) {
 	if interfaceName == "" {
-		log.Println("Error: -iface flag is required for probe mode.")
+		log.Println("error: -iface flag is required in pub mode")
 		flag.Usage()
 		os.Exit(1)
 	}
-	log.Printf("Starting ns-probe in PROBE mode on interface: %s", interfaceName)
+	log.Printf("Starting ns-probe in publisher mode on interface %s", interfaceName)
 
 	// Initialize NATS Publisher
 	pub, err := probe.NewPublisher(cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to NATS: %v", err)
+		log.Fatalf("failed to connect to NATS: %v", err)
 	}
 	defer pub.Close()
 
 	// Open device for live capture
 	handle, err := pcap.OpenLive(interfaceName, snapshotLen, promiscuous, timeout)
 	if err != nil {
-		log.Fatalf("Error opening device %s: %v", interfaceName, err)
+		log.Fatalf("failed to open device %s: %v", interfaceName, err)
 	}
 	defer handle.Close()
 
 	log.Println("Capture started successfully. Publishing packets to NATS...")
 
-	// Set up a channel to handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	// Start processing packets in a separate goroutine
 	go func() {
@@ -83,10 +85,10 @@ func runProbe(cfg config.ProbeConfig, interfaceName string) {
 		for packet := range packetSource.Packets() {
 			info, err := protocol.ParsePacket(packet)
 			if err != nil {
-				continue // Skip non-IP packets
+				continue
 			}
 			if err := pub.Publish(packet, info); err != nil {
-				log.Printf("Failed to publish packet: %v", err)
+				log.Printf("failed to publish packet: %v", err)
 			}
 			packetsPublished++
 			if packetsPublished%1000 == 0 {
@@ -96,18 +98,18 @@ func runProbe(cfg config.ProbeConfig, interfaceName string) {
 	}()
 
 	// Wait for a shutdown signal
-	<-	sigChan
+	<-ctx.Done()
 	log.Println("Shutdown signal received, cleaning up...")
 }
 
 // runSubscriber contains the logic for subscribing to NATS and printing messages.
 func runSubscriber(cfg config.ProbeConfig) {
-	log.Println("Starting ns-probe in SUBSCRIBER mode...")
+	log.Println("Starting ns-probe in subscriber mode...")
 
 	// Create a new subscriber
 	sub, err := probe.NewSubscriber(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create subscriber: %v", err)
+		log.Fatalf("failed to create subscriber: %v", err)
 	}
 	defer sub.Close()
 
@@ -118,14 +120,13 @@ func runSubscriber(cfg config.ProbeConfig) {
 
 	// Start listening for messages
 	if err := sub.Start(handler); err != nil {
-		log.Fatalf("Subscriber failed to start: %v", err)
+		log.Fatalf("subscriber failed to start: %v", err)
 	}
 
-	// Set up a channel to handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	// Wait for a shutdown signal
-	<-	sigChan
+	<-ctx.Done()
 	log.Println("Shutdown signal received, cleaning up...")
 }

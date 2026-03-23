@@ -27,7 +27,11 @@ type PacketContainer struct {
 type Worker struct {
 	packetChan chan *PacketContainer
 	stopChan   chan struct{}
+	done       chan struct{}
 	wg         sync.WaitGroup
+	stopOnce   sync.Once
+	mu         sync.RWMutex
+	stopping   bool
 }
 
 // NewWorker creates and starts a new persistent worker pool.
@@ -45,17 +49,20 @@ func NewWorker(cfg config.PersistenceConfig) (*Worker, error) {
 	w := &Worker{
 		packetChan: make(chan *PacketContainer, bufferSize),
 		stopChan:   make(chan struct{}),
+		done:       make(chan struct{}),
 	}
 
-	w.Start(cfg)
+	if err := w.start(cfg); err != nil {
+		return nil, err
+	}
 	return w, nil
 }
 
-// Start launches the worker goroutines.
-func (w *Worker) Start(cfg config.PersistenceConfig) {
+// start launches the worker goroutines.
+func (w *Worker) start(cfg config.PersistenceConfig) error {
 	file, err := w.createOutputFile(cfg)
 	if err != nil {
-		log.Fatalf("PersistentWorker: Failed to create output file: %v", err)
+		return fmt.Errorf("failed to create persistence output file: %w", err)
 	}
 
 	var workerFunc func(file *os.File)
@@ -70,13 +77,13 @@ func (w *Worker) Start(cfg config.PersistenceConfig) {
 		// A better solution would be to pass the link type from the capture source.
 		pcapWriter := pcapgo.NewWriter(file)
 		if err := pcapWriter.WriteFileHeader(1600, layers.LinkTypeEthernet); err != nil {
-			log.Fatalf("PersistentWorker (pcap): Failed to write file header: %v", err)
+			_ = file.Close()
+			return fmt.Errorf("failed to write pcap file header: %w", err)
 		}
 		workerFunc = w.runPcapWorker(pcapWriter)
 	default:
-		log.Printf("PersistentWorker: Unknown encoding '%s', workers will not start.", cfg.Encoding)
-		file.Close()
-		return
+		_ = file.Close()
+		return fmt.Errorf("unknown persistence encoding: %s", cfg.Encoding)
 	}
 
 	numWorkers := cfg.NumWorkers
@@ -94,15 +101,20 @@ func (w *Worker) Start(cfg config.PersistenceConfig) {
 
 	go func() {
 		<-w.stopChan
+		w.mu.Lock()
+		w.stopping = true
+		w.mu.Unlock()
 		close(w.packetChan)
 		w.wg.Wait()
 		if err := file.Close(); err != nil {
 			log.Printf("PersistentWorker: Error closing file: %v", err)
 		}
 		log.Println("Persistent worker stopped and file closed.")
+		close(w.done)
 	}()
 
 	log.Printf("Persistent worker started with %d goroutines, encoding: %s, writing to: %s", numWorkers, cfg.Encoding, file.Name())
+	return nil
 }
 
 func (w *Worker) createOutputFile(cfg config.PersistenceConfig) (*os.File, error) {
@@ -159,11 +171,25 @@ func (w *Worker) runPcapWorker(pcapWriter *pcapgo.Writer) func(*os.File) {
 
 // Stop gracefully shuts down the worker pool.
 func (w *Worker) Stop() {
-	close(w.stopChan)
+	w.stopOnce.Do(func() {
+		w.mu.Lock()
+		w.stopping = true
+		w.mu.Unlock()
+		close(w.stopChan)
+	})
+	<-w.done
 }
 
 // Enqueue sends a packet container to the worker channel for processing.
 func (w *Worker) Enqueue(container *PacketContainer) {
+	w.mu.RLock()
+	stopping := w.stopping
+	w.mu.RUnlock()
+	if stopping {
+		log.Println("PersistentWorker: Worker is stopping, dropping packet.")
+		return
+	}
+
 	select {
 	case w.packetChan <- container:
 	default:

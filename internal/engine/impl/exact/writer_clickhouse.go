@@ -62,20 +62,20 @@ func connect(cfg config.ClickHouseConfig) (driver.Conn, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
 	opts := &clickhouse.Options{
-        Addr: []string{addr},
-        Auth: clickhouse.Auth{
-            Database: cfg.Database,
-            Username: cfg.Username,
-            Password: cfg.Password,
-        },
-    }
-    if cfg.Cloud {
-        opts.Protocol = clickhouse.HTTP
-        opts.TLS = &tls.Config{
-            InsecureSkipVerify: true,
-        }
-    }
-    conn, err := clickhouse.Open(opts)
+		Addr: []string{addr},
+		Auth: clickhouse.Auth{
+			Database: cfg.Database,
+			Username: cfg.Username,
+			Password: cfg.Password,
+		},
+	}
+	if cfg.Cloud {
+		opts.Protocol = clickhouse.HTTP
+		opts.TLS = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+	conn, err := clickhouse.Open(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -94,17 +94,23 @@ func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fi
 		return fmt.Errorf("invalid payload type for ClickHouse Writer: expected statistic.SnapshotData, got %T", payload)
 	}
 
+	flowCount := 0
+	for _, shard := range snapshot.Shards {
+		flowCount += len(shard.Flows)
+	}
+	if flowCount == 0 {
+		return nil
+	}
+
 	batch, err := w.conn.PrepareBatch(context.Background(), "INSERT INTO flow_metrics")
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
 
 	snapshotTime, _ := time.Parse("2006-01-02_15-04-05", timestamp)
-	flowCount := 0
 
 	for _, shard := range snapshot.Shards {
 		for _, flow := range shard.Flows {
-			flowCount++
 			err = batch.Append(
 				snapshotTime,
 				snapshot.TaskName,
@@ -122,10 +128,6 @@ func (w *ClickHouseWriter) Write(payload interface{}, timestamp, name string, fi
 				return fmt.Errorf("failed to append flow to batch: %w", err)
 			}
 		}
-	}
-
-	if flowCount == 0 {
-		return nil // Nothing to write
 	}
 
 	if err := batch.Send(); err != nil {

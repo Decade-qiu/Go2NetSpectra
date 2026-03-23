@@ -18,7 +18,7 @@ func main() {
 	outputFile := flag.String("o", "test.pcap", "Output pcap file path")
 	packetCount := flag.Int("c", 1000, "Number of packets to generate")
 	flag.Parse()
- 
+
 	f, err := os.Create(*outputFile)
 	if err != nil {
 		log.Fatalf("Failed to create output file: %v", err)
@@ -38,7 +38,7 @@ func main() {
 		if (i+1)%100000 == 0 {
 			log.Printf("Generated %d packets...", i+1)
 		}
-		
+
 		// Generate random packet properties
 		srcIP := net.IP{byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256))}
 		dstIP := net.IP{byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256))}
@@ -48,8 +48,8 @@ func main() {
 
 		// Create layers
 		ethLayer := &layers.Ethernet{
-			SrcMAC: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
-			DstMAC: net.HardwareAddr{0x00, 0x66, 0x77, 0x88, 0x99, 0xAA},
+			SrcMAC:       net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+			DstMAC:       net.HardwareAddr{0x00, 0x66, 0x77, 0x88, 0x99, 0xAA},
 			EthernetType: layers.EthernetTypeIPv4,
 		}
 		ipLayer := &layers.IPv4{

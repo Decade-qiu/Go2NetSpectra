@@ -2,8 +2,7 @@ package model
 
 import "Go2NetSpectra/internal/config"
 
-// Task defines a single, self-contained aggregation task (e.g., exact count, sketch, etc.).
-// This is the interface for the "execution layer".
+// Task defines a single, self-contained aggregation task (e.g., exact count or sketch).
 type Task interface {
 	ProcessPacket(packet *PacketInfo)
 	Snapshot() interface{}
