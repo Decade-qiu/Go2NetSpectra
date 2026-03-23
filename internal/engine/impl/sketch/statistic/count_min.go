@@ -15,22 +15,26 @@ const (
 	defaultCountThereshold = 512
 )
 
+// PacketCount stores the current count fingerprint for one bucket.
 type PacketCount struct {
 	FP []byte
 	C  uint32
 }
 
+// PacketSize stores the current size fingerprint for one bucket.
 type PacketSize struct {
 	FP []byte
 	S  uint32
 }
 
+// Bucket stores count and size estimates for one sketch position.
 type Bucket struct {
 	Count PacketCount
 	Size  PacketSize
 	Mu    sync.RWMutex
 }
 
+// CountMin tracks approximate per-flow byte and packet totals.
 type CountMin struct {
 	w, d            uint32
 	sizeThereshold  uint32
@@ -39,6 +43,7 @@ type CountMin struct {
 	table           [][]Bucket
 }
 
+// NewCountMin creates a count-min sketch with heavy-hitter thresholds.
 func NewCountMin(width, depth, st, ct uint32, FS uint32) *CountMin {
 	if width == 0 {
 		width = defaultWidth
@@ -85,7 +90,7 @@ func NewCountMin(width, depth, st, ct uint32, FS uint32) *CountMin {
 	}
 }
 
-// Implementation of Count-Min Sketch insertion
+// Insert updates the sketch with one flow observation.
 func (t *CountMin) Insert(flow, elem []byte, size uint32) {
 	for i := 0; i < int(t.d); i++ {
 		index := MurmurHash3(flow, t.seed[i]) % t.w
@@ -151,7 +156,7 @@ func (t *CountMin) Insert(flow, elem []byte, size uint32) {
 
 }
 
-// Implementation of Count-Min Sketch query
+// Query returns the current sketch estimate for flow.
 func (t *CountMin) Query(flow []byte) uint64 {
 	sz, ct := uint32(0), uint32(0)
 	for i := 0; i < int(t.d); i++ {

@@ -16,8 +16,8 @@ func init() {
 	gob.Register(&statistic.Flow{})
 }
 
-// SummaryData holds the metadata for a snapshot, internal to the writer.
-type SummaryData struct {
+// summaryData holds the metadata for a snapshot file.
+type summaryData struct {
 	TaskName     string `json:"task_name"`
 	TotalFlows   int    `json:"total_flows"`
 	TotalBytes   uint64 `json:"total_bytes"`
@@ -38,8 +38,8 @@ func NewGobWriter(rootPath string, interval time.Duration) model.Writer {
 	return &GobWriter{rootPath: rootPath, interval: interval}
 }
 
-// GetInterval returns the configured snapshot interval for this writer.
-func (w *GobWriter) GetInterval() time.Duration {
+// Interval returns the configured snapshot interval for this writer.
+func (w *GobWriter) Interval() time.Duration {
 	return w.interval
 }
 
@@ -48,7 +48,7 @@ func (w *GobWriter) GetInterval() time.Duration {
 func (w *GobWriter) Write(payload interface{}, timestamp, name string, fields []string, decodeFlowFunc func(flow []byte, fields []string) string) error {
 	snapshot, ok := payload.(statistic.SnapshotData)
 	if !ok {
-		return fmt.Errorf("invalid payload type for GobWriter: expected statistic.SnapshotData, got %T", payload)
+		return fmt.Errorf("invalid payload type for gob writer: expected statistic.SnapshotData, got %T", payload)
 	}
 
 	// 1. Create timestamped directory
@@ -89,7 +89,7 @@ func (w *GobWriter) Write(payload interface{}, timestamp, name string, fields []
 
 	// 3. Write summary file if there were any flows
 	if totalFlows > 0 {
-		summary := SummaryData{
+		summary := summaryData{
 			TaskName:     snapshot.TaskName,
 			TotalFlows:   totalFlows,
 			TotalBytes:   totalBytes,

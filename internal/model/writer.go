@@ -8,6 +8,6 @@ type Writer interface {
 	// The implementation is expected to know how to handle the payload type it receives.
 	Write(payload interface{}, timestamp, name string, fields []string, decodeFlowFunc func(flow []byte, fields []string) string) error
 
-	// GetInterval returns the configured snapshot interval for this writer.
-	GetInterval() time.Duration
+	// Interval returns the configured snapshot interval for this writer.
+	Interval() time.Duration
 }

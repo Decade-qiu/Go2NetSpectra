@@ -19,14 +19,14 @@ func TestCreateUsesRegisteredAggregators(t *testing.T) {
 			Sketch: config.SketchAggregatorConfig{
 				Tasks: []config.SketchTaskDef{
 					{
-						Name:            "cm_src_left",
-						SktType:         0,
-						FlowFields:      []string{"SrcIP"},
-						ElementFields:   []string{"DstIP"},
-						Width:           8,
-						Depth:           2,
-						SizeThereshold:  16,
-						CountThereshold: 2,
+						Name:           "cm_src_left",
+						SketchType:     0,
+						FlowFields:     []string{"SrcIP"},
+						ElementFields:  []string{"DstIP"},
+						Width:          8,
+						Depth:          2,
+						SizeThreshold:  16,
+						CountThreshold: 2,
 					},
 				},
 			},

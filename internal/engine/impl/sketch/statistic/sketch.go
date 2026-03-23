@@ -9,16 +9,19 @@ type Sketch interface {
 	Reset()
 }
 
+// HeavySize stores a heavy-hitter flow and its estimated byte size.
 type HeavySize struct {
 	Flow []byte
 	Size uint32
 }
 
+// HeavyCount stores a heavy-hitter flow and its estimated packet count.
 type HeavyCount struct {
 	Flow  []byte
 	Count uint32
 }
 
+// HeavyRecord groups heavy-hitter results by size and count metrics.
 type HeavyRecord struct {
 	Size  []HeavySize
 	Count []HeavyCount

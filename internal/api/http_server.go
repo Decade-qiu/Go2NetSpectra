@@ -53,7 +53,7 @@ func RunLegacyHTTPServer(ctx context.Context, cfg *config.Config) error {
 	router.HandleFunc("/api/v1/flows/trace", handler.traceFlowHandler).Methods(http.MethodPost)
 
 	server := &http.Server{
-		Addr:    cfg.API.HttpListenAddr,
+		Addr:    cfg.API.HTTPListenAddr,
 		Handler: router,
 	}
 
@@ -146,7 +146,9 @@ func (h *legacyHTTPHandler) aggregateFlowsHandler(w http.ResponseWriter, r *http
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(jsonBytes)
+	if _, err := w.Write(jsonBytes); err != nil {
+		log.Printf("failed to write aggregate response: %v", err)
+	}
 }
 
 func (h *legacyHTTPHandler) traceFlowHandler(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +177,9 @@ func (h *legacyHTTPHandler) traceFlowHandler(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(jsonBytes)
+	if _, err := w.Write(jsonBytes); err != nil {
+		log.Printf("failed to write trace response: %v", err)
+	}
 }
 
 func newGrafanaHTTPHandler(service *QueryServiceServer) http.Handler {

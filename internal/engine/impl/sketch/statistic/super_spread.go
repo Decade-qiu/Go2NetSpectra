@@ -20,7 +20,7 @@ const (
 	maxMergedFieldSize = 74
 )
 
-// GeneralHLL HyperLogLog Sampler
+// GeneralHLL implements the sampled HyperLogLog structure used by SuperSpread.
 type GeneralHLL struct {
 	m        uint32
 	size     uint32
@@ -32,7 +32,7 @@ type GeneralHLL struct {
 	pbits uint64 // atomic access
 }
 
-// NewGeneralHLL
+// NewGeneralHLL creates a sampled HyperLogLog instance.
 func NewGeneralHLL(m, size uint32, base float64) *GeneralHLL {
 	hll := &GeneralHLL{
 		m:        m,
@@ -110,7 +110,7 @@ func (g *GeneralHLL) encode(element []byte) float64 {
 	return result
 }
 
-// SuperSpread
+// SuperSpread estimates flow spread and reports heavy spreaders.
 type SuperSpread struct {
 	d         uint32
 	w         uint32
@@ -123,7 +123,7 @@ type SuperSpread struct {
 	Mus       [][]sync.Mutex
 }
 
-// NewSuperSpread
+// NewSuperSpread creates a SuperSpread sketch with optional default parameters.
 func NewSuperSpread(width, depth, threshold, m, size uint32, base, b float64, FS uint32) *SuperSpread {
 
 	if width == 0 {
@@ -178,7 +178,7 @@ func NewSuperSpread(width, depth, threshold, m, size uint32, base, b float64, FS
 	return ss
 }
 
-// Implementation of SuperSpread insertion
+// Insert records one flow-element observation in the sketch.
 func (ss *SuperSpread) Insert(flow, elem []byte, size uint32) {
 	mergedLen := len(flow) + len(elem)
 	var mergedBuf [maxMergedFieldSize]byte
@@ -234,7 +234,7 @@ func (ss *SuperSpread) Insert(flow, elem []byte, size uint32) {
 	}
 }
 
-// Implementation of SuperSpread query
+// Query returns the current spread estimate for flow.
 func (ss *SuperSpread) Query(flow []byte) uint64 {
 	estimate := uint32(0)
 	for i := 0; i < int(ss.d); i++ {
@@ -248,9 +248,9 @@ func (ss *SuperSpread) Query(flow []byte) uint64 {
 	return uint64(math.Max(1, float64(estimate)))
 }
 
-// Implementation of SuperSpread HeavyHitters
-// result reuse HeavyRecord.Count.Flow as the flow ID
-// and HeavyRecord.Count.Count as the estimated spread
+// HeavyHitters returns heavy spreaders sorted by estimated spread.
+// It reuses HeavyRecord.Count.Flow as the flow ID and HeavyRecord.Count.Count
+// as the estimated spread.
 func (ss *SuperSpread) HeavyHitters() HeavyRecord {
 	flowSet := make(map[string]bool)
 	results := make([]HeavyCount, 0)
@@ -293,7 +293,7 @@ func (ss *SuperSpread) HeavyHitters() HeavyRecord {
 	}
 }
 
-// Reset
+// Reset clears the internal state of the sketch.
 func (ss *SuperSpread) Reset() {
 	for i := 0; i < int(ss.d); i++ {
 		for j := 0; j < int(ss.w); j++ {

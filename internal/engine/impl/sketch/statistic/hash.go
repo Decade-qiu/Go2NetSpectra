@@ -9,6 +9,7 @@ const (
 	c2_32 uint32 = 0x1b873593
 )
 
+// MurmurHash3 computes the 32-bit MurmurHash3 digest for data using seed.
 func MurmurHash3(data []byte, seed uint32) (h1 uint32) {
 	h1 = seed
 	clen := uint32(len(data))

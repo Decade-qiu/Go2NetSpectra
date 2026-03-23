@@ -13,12 +13,12 @@ import (
 )
 
 // --- API Query Structs ---
-type AggregationRequest struct {
+type aggregationRequest struct {
 	EndTime  string `json:"end_time,omitempty"`
 	TaskName string `json:"task_name,omitempty"`
 }
 
-type TraceFlowRequest struct {
+type traceFlowRequest struct {
 	TaskName string            `json:"task_name"`
 	FlowKeys map[string]string `json:"flow_keys"`
 	EndTime  string            `json:"end_time,omitempty"`
@@ -55,7 +55,7 @@ func main() {
 func queryAggregation(taskName, endTime string) {
 	apiURL := "http://localhost:8080/api/v1/aggregate"
 
-	reqBody := AggregationRequest{
+	reqBody := aggregationRequest{
 		EndTime:  endTime,
 		TaskName: taskName,
 	}
@@ -106,7 +106,7 @@ func traceFlow(taskName, flowKeyStr, endTime string) {
 		}
 	}
 
-	reqBody := TraceFlowRequest{
+	reqBody := traceFlowRequest{
 		TaskName: taskName,
 		FlowKeys: flowKeys,
 		EndTime:  endTime,

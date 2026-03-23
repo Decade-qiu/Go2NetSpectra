@@ -31,14 +31,14 @@ func TestCountMin(t *testing.T) {
 	Counthreshold := uint32(4096)
 	Sizethreshold := uint32(4096 * 1024)
 	cfg := config.SketchTaskDef{
-		Name:            "per_src_flow",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  Sizethreshold,
-		CountThereshold: Counthreshold,
+		Name:           "per_src_flow",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  Sizethreshold,
+		CountThreshold: Counthreshold,
 	}
 
 	task := New(cfg)
@@ -178,14 +178,14 @@ func TestCountMin(t *testing.T) {
 
 func TestCountMinFixtureProducesHeavyHitterSnapshot(t *testing.T) {
 	cfg := config.SketchTaskDef{
-		Name:            "fixture-heavy-hitter",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP"},
-		Width:           1 << 8,
-		Depth:           2,
-		SizeThereshold:  1,
-		CountThereshold: 1,
+		Name:           "fixture-heavy-hitter",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP"},
+		Width:          1 << 8,
+		Depth:          2,
+		SizeThreshold:  1,
+		CountThreshold: 1,
 	}
 
 	task := New(cfg)

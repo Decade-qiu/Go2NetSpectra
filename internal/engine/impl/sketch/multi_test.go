@@ -31,14 +31,14 @@ func TestMultiProcess(t *testing.T) {
 	SizeThreshold := uint32(4096 * 1024)
 
 	task := New(config.SketchTaskDef{
-		Name:            "per_src_flow",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  SizeThreshold,
-		CountThereshold: CountThreshold,
+		Name:           "per_src_flow",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  SizeThreshold,
+		CountThreshold: CountThreshold,
 	})
 
 	// Ground truth (map-based)
@@ -208,18 +208,18 @@ func TestMultiProcessSS(t *testing.T) {
 
 	// Initialize SuperSpread sketch
 	cfg := config.SketchTaskDef{
-		Name:            "SuperSpread",
-		SktType:         1,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP"},
-		Width:           32768,
-		Depth:           2,
-		SizeThereshold:  0,
-		CountThereshold: 512,
-		M:               128,
-		Base:            0.5,
-		Size:            5,
-		B:               1.08,
+		Name:           "SuperSpread",
+		SketchType:     1,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP"},
+		Width:          32768,
+		Depth:          2,
+		SizeThreshold:  0,
+		CountThreshold: 512,
+		M:              128,
+		Base:           0.5,
+		Size:           5,
+		B:              1.08,
 	}
 
 	task := New(cfg)

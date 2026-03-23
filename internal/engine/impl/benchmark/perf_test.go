@@ -1,4 +1,4 @@
-package test
+package benchmark
 
 import (
 	v1 "Go2NetSpectra/api/gen/v1"
@@ -115,14 +115,14 @@ func BenchmarkCountMinTaskProcessPacket(b *testing.B) {
 	restoreLogs := muteBenchmarkLogs()
 	defer restoreLogs()
 	task := sketch.New(config.SketchTaskDef{
-		Name:            "bench-count-min",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		Width:           1 << 10,
-		Depth:           2,
-		SizeThereshold:  1,
-		CountThereshold: 1,
+		Name:           "bench-count-min",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:          1 << 10,
+		Depth:          2,
+		SizeThreshold:  1,
+		CountThreshold: 1,
 	})
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -140,17 +140,17 @@ func BenchmarkSuperSpreadTaskProcessPacket(b *testing.B) {
 	restoreLogs := muteBenchmarkLogs()
 	defer restoreLogs()
 	task := sketch.New(config.SketchTaskDef{
-		Name:            "bench-super-spread",
-		SktType:         1,
-		FlowFields:      []string{"DstIP"},
-		ElementFields:   []string{"SrcIP"},
-		Width:           1 << 10,
-		Depth:           2,
-		CountThereshold: 1,
-		M:               32,
-		Size:            5,
-		Base:            0.5,
-		B:               1.08,
+		Name:           "bench-super-spread",
+		SketchType:     1,
+		FlowFields:     []string{"DstIP"},
+		ElementFields:  []string{"SrcIP"},
+		Width:          1 << 10,
+		Depth:          2,
+		CountThreshold: 1,
+		M:              32,
+		Size:           5,
+		Base:           0.5,
+		B:              1.08,
 	})
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -194,8 +194,8 @@ func BenchmarkAggregator(b *testing.B) {
 	}
 
 	// b.Run("CM_Parallel", run_cm_parallel)
-	b.Run("SS_Parallel", run_SS_parallel)
-	b.Run("SS_Exact_Parallel", run_ssexact_parallel)
+	b.Run("SS_Parallel", runSSParallel)
+	b.Run("SS_Exact_Parallel", runSSExactParallel)
 	// b.Run("Exact_Parallel", run_exact_parallel)
 
 	// run_cm(b)
@@ -203,20 +203,20 @@ func BenchmarkAggregator(b *testing.B) {
 	// run_exact(b)
 }
 
-func run_SS_parallel(b *testing.B) {
+func runSSParallel(b *testing.B) {
 	cfg := config.SketchTaskDef{
-		Name:            "SuperSpread",
-		SktType:         1,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  0,
-		CountThereshold: 512,
-		M:               128,
-		Base:            0.5,
-		Size:            5,
-		B:               1.08,
+		Name:           "SuperSpread",
+		SketchType:     1,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  0,
+		CountThreshold: 512,
+		M:              128,
+		Base:           0.5,
+		Size:           5,
+		B:              1.08,
 	}
 
 	task := sketch.New(cfg)
@@ -244,16 +244,16 @@ func run_SS_parallel(b *testing.B) {
 	})
 }
 
-func run_cm_parallel(b *testing.B) {
+func runCmParallel(b *testing.B) {
 	cfg := config.SketchTaskDef{
-		Name:            "per_src_flow",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  4096 * 1024,
-		CountThereshold: 4096,
+		Name:           "per_src_flow",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  4096 * 1024,
+		CountThreshold: 4096,
 	}
 
 	task := sketch.New(cfg)
@@ -281,7 +281,7 @@ func run_cm_parallel(b *testing.B) {
 	})
 }
 
-func run_exact_parallel(b *testing.B) {
+func runExactParallel(b *testing.B) {
 	task := exact.New("exact_per_src", []string{"SrcIP"}, 64)
 
 	b.Run("Insert_Exact_Parallel", func(b *testing.B) {
@@ -307,7 +307,7 @@ func run_exact_parallel(b *testing.B) {
 	})
 }
 
-func run_ssexact_parallel(b *testing.B) {
+func runSSExactParallel(b *testing.B) {
 	spreadMap := make(map[string]map[string]bool)
 	var mu sync.Mutex
 
@@ -342,16 +342,16 @@ func run_ssexact_parallel(b *testing.B) {
 	})
 }
 
-func run_cm(b *testing.B) {
+func runCm(b *testing.B) {
 	cfg := config.SketchTaskDef{
-		Name:            "per_src_flow",
-		SktType:         0,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  4096 * 1024,
-		CountThereshold: 4096,
+		Name:           "per_src_flow",
+		SketchType:     0,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP", "SrcPort", "DstPort", "Protocol"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  4096 * 1024,
+		CountThreshold: 4096,
 	}
 
 	task := sketch.New(cfg)
@@ -375,20 +375,20 @@ func run_cm(b *testing.B) {
 	})
 }
 
-func run_ss(b *testing.B) {
+func runSs(b *testing.B) {
 	cfg := config.SketchTaskDef{
-		Name:            "SuperSpread",
-		SktType:         1,
-		FlowFields:      []string{"SrcIP"},
-		ElementFields:   []string{"DstIP"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  0,
-		CountThereshold: 512,
-		M:               128,
-		Base:            0.5,
-		Size:            5,
-		B:               1.08,
+		Name:           "SuperSpread",
+		SketchType:     1,
+		FlowFields:     []string{"SrcIP"},
+		ElementFields:  []string{"DstIP"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  0,
+		CountThreshold: 512,
+		M:              128,
+		Base:           0.5,
+		Size:           5,
+		B:              1.08,
 	}
 
 	task := sketch.New(cfg)
@@ -412,7 +412,7 @@ func run_ss(b *testing.B) {
 	})
 }
 
-func run_exact(b *testing.B) {
+func runExact(b *testing.B) {
 	task := exact.New("exact_per_src", []string{"SrcIP"}, 64)
 
 	b.Run("Insert_Exact", func(b *testing.B) {

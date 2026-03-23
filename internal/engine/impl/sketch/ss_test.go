@@ -30,18 +30,18 @@ func TestSuperSpread(t *testing.T) {
 
 	// Initialize SuperSpread sketch
 	cfg := config.SketchTaskDef{
-		Name:            "per_src_flow",
-		SktType:         1,
-		FlowFields:      []string{"DstIP"},
-		ElementFields:   []string{"SrcIP"},
-		Width:           1 << 13,
-		Depth:           2,
-		SizeThereshold:  0,
-		CountThereshold: 750,
-		M:               128,
-		Base:            0.5,
-		Size:            5,
-		B:               1.08,
+		Name:           "per_src_flow",
+		SketchType:     1,
+		FlowFields:     []string{"DstIP"},
+		ElementFields:  []string{"SrcIP"},
+		Width:          1 << 13,
+		Depth:          2,
+		SizeThreshold:  0,
+		CountThreshold: 750,
+		M:              128,
+		Base:           0.5,
+		Size:           5,
+		B:              1.08,
 	}
 
 	task := New(cfg)
@@ -150,17 +150,17 @@ func TestSuperSpread(t *testing.T) {
 
 func TestSuperSpreadResetKeepsTaskUsable(t *testing.T) {
 	task := New(config.SketchTaskDef{
-		Name:            "fixture-super-spread",
-		SktType:         1,
-		FlowFields:      []string{"DstIP"},
-		ElementFields:   []string{"SrcIP"},
-		Width:           64,
-		Depth:           2,
-		CountThereshold: 1,
-		M:               16,
-		Size:            5,
-		Base:            0.5,
-		B:               1.08,
+		Name:           "fixture-super-spread",
+		SketchType:     1,
+		FlowFields:     []string{"DstIP"},
+		ElementFields:  []string{"SrcIP"},
+		Width:          64,
+		Depth:          2,
+		CountThreshold: 1,
+		M:              16,
+		Size:           5,
+		Base:           0.5,
+		B:              1.08,
 	})
 
 	packet := &model.PacketInfo{

@@ -33,26 +33,26 @@ func RunQueryAPIServers(ctx context.Context, cfg *config.Config) error {
 	grpcServer := grpc.NewServer()
 	v1.RegisterQueryServiceServer(grpcServer, service)
 
-	listener, err := net.Listen("tcp", cfg.API.GrpcListenAddr)
+	listener, err := net.Listen("tcp", cfg.API.GRPCListenAddr)
 	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", cfg.API.GrpcListenAddr, err)
+		return fmt.Errorf("failed to listen on %s: %w", cfg.API.GRPCListenAddr, err)
 	}
 	defer listener.Close()
 
 	httpServer := &http.Server{
-		Addr:    cfg.API.HttpListenAddr,
+		Addr:    cfg.API.HTTPListenAddr,
 		Handler: newGrafanaHTTPHandler(service),
 	}
 
 	errCh := make(chan error, 2)
 	go func() {
-		log.Printf("gRPC API server starting on %s", cfg.API.GrpcListenAddr)
+		log.Printf("gRPC API server starting on %s", cfg.API.GRPCListenAddr)
 		if serveErr := grpcServer.Serve(listener); serveErr != nil {
 			errCh <- fmt.Errorf("failed to serve grpc: %w", serveErr)
 		}
 	}()
 	go func() {
-		log.Printf("HTTP server (Grafana) starting on %s", cfg.API.HttpListenAddr)
+		log.Printf("HTTP server (Grafana) starting on %s", cfg.API.HTTPListenAddr)
 		if serveErr := httpServer.ListenAndServe(); serveErr != nil && serveErr != http.ErrServerClosed {
 			errCh <- fmt.Errorf("failed to serve http: %w", serveErr)
 		}
@@ -61,7 +61,9 @@ func RunQueryAPIServers(ctx context.Context, cfg *config.Config) error {
 	select {
 	case err := <-errCh:
 		grpcServer.GracefulStop()
-		_ = shutdownHTTPServer(httpServer)
+		if shutdownErr := shutdownHTTPServer(httpServer); shutdownErr != nil {
+			log.Printf("failed to shut down http server after grpc error: %v", shutdownErr)
+		}
 		return err
 	case <-ctx.Done():
 	}

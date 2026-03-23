@@ -34,7 +34,7 @@ type Manager struct {
 	resetterWg    sync.WaitGroup // New WaitGroup for the resetter
 }
 
-// New creates a new Manager.
+// NewManager creates a new Manager.
 func NewManager(cfg *config.Config) (*Manager, error) {
 	taskGroups, err := factory.Create(cfg)
 	if err != nil {
@@ -92,7 +92,7 @@ func (m *Manager) Start() {
 			m.snapshotterWg.Add(1)
 			// Pass the group-specific tasks to the snapshotter
 			go m.runSnapshotter(writer, group.Tasks)
-			log.Printf("Started snapshotter for a writer with interval %s, handling %d tasks.", writer.GetInterval(), len(group.Tasks))
+			log.Printf("Started snapshotter for a writer with interval %s, handling %d tasks.", writer.Interval(), len(group.Tasks))
 		}
 	}
 
@@ -117,7 +117,7 @@ func (m *Manager) Start() {
 // runSnapshotter runs a dedicated snapshot loop for a single writer and its associated tasks.
 func (m *Manager) runSnapshotter(writer model.Writer, tasks []model.Task) {
 	defer m.snapshotterWg.Done()
-	interval := writer.GetInterval()
+	interval := writer.Interval()
 	if interval <= 0 {
 		log.Printf("Invalid interval %s for writer, snapshotter will not run.", interval)
 		return
@@ -225,6 +225,7 @@ func (m *Manager) worker() {
 	}
 }
 
+// InputChannel returns the protobuf packet input channel consumed by the worker pool.
 func (m *Manager) InputChannel() chan<- *v1.PacketInfo {
 	return m.packetChannel
 }
